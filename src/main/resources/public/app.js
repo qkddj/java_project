@@ -1,9 +1,61 @@
 const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsScheme}://${location.host}/ws`);
 let userId, roomId, pc, localStream;
+let remoteReadyWatchdog = null;
+let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
 
 const $ = (id) => document.getElementById(id);
+function showRemoteWaiting(show){
+  const ph = document.getElementById('remotePlaceholder');
+  if (!ph) return;
+  ph.style.display = show ? '' : 'none';
+}
+function alertOnTrackEvents(track, label){
+  if (!track) return;
+  track.addEventListener('ended', () => {
+    alert(`${label} 장치 연결이 종료되었습니다.`);
+  });
+  track.addEventListener('mute', () => {
+    // 신호 중단(권한 차단/장치 문제) 알림
+    alert(`${label}가 꺼졌습니다.`);
+  });
+  track.addEventListener('unmute', () => {
+    alert(`${label}가 켜졌습니다.`);
+  });
+}
+function attachLocalTrackAlerts(stream){
+  try {
+    stream.getAudioTracks().forEach(t => alertOnTrackEvents(t, '마이크'));
+    stream.getVideoTracks().forEach(t => alertOnTrackEvents(t, '카메라'));
+  } catch (_) {}
+}
+function hideOverlayIfVideoLive(){
+  const rv = document.getElementById('remoteVideo');
+  if (!rv) return;
+  const stream = rv.srcObject;
+  if (stream && stream.getVideoTracks && stream.getVideoTracks().some(t=>t.readyState==='live')) {
+    showRemoteWaiting(false);
+  }
+}
+function startRemoteReadyWatchdog(){
+  const rv = document.getElementById('remoteVideo');
+  if (!rv) return;
+  if (remoteReadyWatchdog) { clearInterval(remoteReadyWatchdog); remoteReadyWatchdog = null; }
+  let attempts = 0;
+  remoteReadyWatchdog = setInterval(() => {
+    attempts++;
+    // 비디오 픽셀 크기 또는 트랙 live 여부로 판정
+    if ((rv.videoWidth && rv.videoHeight) || (rv.srcObject && rv.srcObject.getVideoTracks && rv.srcObject.getVideoTracks().some(t=>t.readyState==='live'))) {
+      showRemoteWaiting(false);
+      clearInterval(remoteReadyWatchdog);
+      remoteReadyWatchdog = null;
+    } else if (attempts > 40) { // ~12초 후 중지
+      clearInterval(remoteReadyWatchdog);
+      remoteReadyWatchdog = null;
+    }
+  }, 300);
+}
 const statusEl = $('status');
 const chatList = $('chatList');
 const chatInput = $('chatInput');
@@ -29,26 +81,60 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       setStatus(`매칭됨 (room ${roomId.substring(0,8)})`);
-      // 상대 영상 연결 준비중: 대기 오버레이는 숨김
-      (function(){ const ph = document.getElementById('remotePlaceholder'); if (ph) ph.style.display = 'none'; })();
+      // 상대 연결 대기 표시 유지 (실제 재생되면 자동으로 숨김)
+      showRemoteWaiting(true);
+      startRemoteReadyWatchdog();
       await startWebRTC(true);
       break;
     case 'rtc.offer':
       await ensurePc();
-      await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      wsSend({ type: 'rtc.answer', roomId, data: pc.localDescription });
+      try {
+        // glare 해결: 로컬 오퍼 중이면 롤백 후 원격 오퍼 수락
+        if (pc.signalingState === 'have-local-offer') {
+          await pc.setLocalDescription({ type: 'rollback' });
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+        if (pendingRemoteCandidates.length) {
+          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch(_){} }
+          pendingRemoteCandidates = [];
+        }
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        wsSend({ type: 'rtc.answer', roomId, data: pc.localDescription });
+        startRemoteReadyWatchdog();
+      } catch (e) {
+        console.warn('rtc.offer handling failed:', e, 'state=', pc.signalingState);
+      }
       break;
     case 'rtc.answer':
-      await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+      if (!pc) break;
+      if (pc.signalingState !== 'have-local-offer') {
+        console.warn('Skip unexpected answer in state', pc.signalingState);
+        break;
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+        if (pendingRemoteCandidates.length) {
+          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch(_){} }
+          pendingRemoteCandidates = [];
+        }
+        startRemoteReadyWatchdog();
+      } catch (e) {
+        console.warn('rtc.answer setRemoteDescription error:', e, 'state=', pc.signalingState);
+      }
       break;
     case 'rtc.ice':
-      if (msg.data) await pc.addIceCandidate(msg.data);
+      if (msg.data) {
+        if (pc && pc.remoteDescription) {
+          try { await pc.addIceCandidate(msg.data); } catch(e){ console.warn('addIceCandidate error', e); }
+        } else {
+          pendingRemoteCandidates.push(msg.data);
+        }
+      }
       break;
     case 'callEnded':
       teardown('상대 종료');
-      (function(){ const ph = document.getElementById('remotePlaceholder'); if (ph) ph.style.display = ''; })();
+      showRemoteWaiting(true);
       break;
   }
 });
@@ -72,6 +158,7 @@ async function getMedia(){
   $('localVideo').srcObject = localStream;
   micSender = null;
   camSender = null;
+  attachLocalTrackAlerts(localStream);
   return localStream;
 }
 
@@ -90,24 +177,21 @@ async function ensurePc(){
   pc.ontrack = (e) => {
     const rv = $('remoteVideo');
     rv.srcObject = e.streams[0];
+    if (rv.muted !== true) rv.muted = true;
+    if (!rv.hasAttribute('playsinline')) rv.setAttribute('playsinline','');
+    rv.addEventListener('click', () => { try { rv.muted = false; rv.play().catch(()=>{}); } catch(_) {} }, { once:true });
     // iOS 사파리는 사용자 제스처 이후에도 재생을 명시적으로 호출해야 할 때가 있음
-    setTimeout(() => { rv.play().catch(()=>{}); }, 0);
-    const ph = document.getElementById('remotePlaceholder');
-    if (ph) ph.style.display = 'none';
+    setTimeout(() => { rv.play().catch(()=>{}); hideOverlayIfVideoLive(); }, 0);
   };
   pc.oniceconnectionstatechange = () => {
     const state = pc.iceConnectionState;
-    const ph = document.getElementById('remotePlaceholder');
-    if (!ph) return;
-    if (state === 'connected' || state === 'completed') ph.style.display = 'none';
-    if (state === 'disconnected' || state === 'failed' || state === 'closed') ph.style.display = '';
+    if (state === 'connected' || state === 'completed') hideOverlayIfVideoLive();
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') showRemoteWaiting(true);
   };
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
-    const ph = document.getElementById('remotePlaceholder');
-    if (!ph) return;
-    if (state === 'connected') ph.style.display = 'none';
-    if (state === 'disconnected' || state === 'failed' || state === 'closed') ph.style.display = '';
+    if (state === 'connected') hideOverlayIfVideoLive();
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') showRemoteWaiting(true);
   };
   pc.onicecandidate = (e) => e.candidate && wsSend({ type:'rtc.ice', roomId, data: e.candidate });
   const stream = await getMedia();
@@ -139,9 +223,17 @@ function teardown(reason){
   const rv = $('remoteVideo');
   if (lv) lv.srcObject = null;
   if (rv) rv.srcObject = null;
-  const ph = document.getElementById('remotePlaceholder');
-  if (ph) ph.style.display = '';
+  showRemoteWaiting(true);
 }
+
+// 비디오 이벤트 기반으로도 오버레이 제어 (브라우저별 ontrack 순서 차이 보완)
+(function(){
+  const rv = document.getElementById('remoteVideo');
+  if (!rv) return;
+  ['loadedmetadata','loadeddata','canplay','playing'].forEach(ev => {
+    rv.addEventListener(ev, () => showRemoteWaiting(false));
+  });
+})();
 
 // UI
 $('btnStart').onclick = async () => {
@@ -166,12 +258,14 @@ $('btnMute').onclick = () => {
   const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);
   if (!track) { alert('마이크 트랙이 없습니다.'); return; }
   track.enabled = !track.enabled;
+  alert(track.enabled ? '마이크가 켜졌습니다.' : '마이크가 꺼졌습니다.');
 };
 
 $('btnCamera').onclick = () => {
   const track = (camSender && camSender.track) || (localStream && localStream.getVideoTracks()[0]);
   if (!track) { alert('카메라 트랙이 없습니다.'); return; }
   track.enabled = !track.enabled;
+  alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
 };
 
 // no TURN form events
