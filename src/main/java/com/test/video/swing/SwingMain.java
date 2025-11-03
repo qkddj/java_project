@@ -15,13 +15,6 @@ public class SwingMain extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         
-        // JavaFX Platform 초기화 (Swing과 함께 사용하기 위해)
-        try {
-            javafx.application.Platform.startup(() -> {});
-        } catch (IllegalStateException e) {
-            // 이미 초기화된 경우 무시
-        }
-        
         // 서버 백그라운드 시작
         serverLauncher = new ServerLauncherWrapper();
         serverLauncher.startServer();
