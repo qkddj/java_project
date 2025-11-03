@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"> <title>Webcam Test</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+    </style>
+</head>
+<body>
+    <video id="myWebcam" autoplay muted></video>
+    <script>
+        // 카메라 켜기
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, audio: false 
+                });
+                document.getElementById('myWebcam').srcObject = stream;
+            } catch (e) {
+                console.error("카메라 접근 실패:", e);
+            }
+        }
+        startCamera();
+    </script>
+</body>
+</html>

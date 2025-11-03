@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>메인 화면</title>
+    <style>
+        body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:#f5f5f5; }
+        header { padding:16px; background:#2b64ff; color:#fff; font-weight:700; text-align:center; }
+        main { padding:24px; max-width:800px; margin:0 auto; }
+        .menu-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:24px; }
+        .menu-item { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; text-align:center; cursor:pointer; transition:all 0.2s; }
+        .menu-item:hover { box-shadow:0 4px 12px rgba(0,0,0,0.1); transform:translateY(-2px); }
+        .menu-item h3 { margin:0 0 8px 0; color:#2b64ff; }
+        .menu-item p { margin:0; color:#6b7280; font-size:14px; }
+        .btn-video { background:#2b64ff; color:#fff; border:none; padding:12px 24px; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; }
+        .btn-video:hover { background:#1e4ed8; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>커뮤니티 메인</h1>
+</header>
+<main>
+    <div class="menu-grid">
+        <div class="menu-item" onclick="location.href='/board/free'">
+            <h3>자유 게시판</h3>
+            <p>자유롭게 이야기 나누기</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/news'">
+            <h3>동네 소식</h3>
+            <p>지역 소식과 행사 정보</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/qna'">
+            <h3>동네 질문</h3>
+            <p>생활 궁금증 해결</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/trade'">
+            <h3>중고 거래</h3>
+            <p>물품 사고팔기</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/lost'">
+            <h3>분실물</h3>
+            <p>잃어버린 물건 찾기</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/meetup'">
+            <h3>소모임</h3>
+            <p>취미 활동 모임</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/board/quiz'">
+            <h3>퀴즈</h3>
+            <p>퀴즈 올리고 참여하기</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/chat'">
+            <h3>랜덤 채팅</h3>
+            <p>익명으로 채팅하기</p>
+        </div>
+        <div class="menu-item" onclick="window.location.href='video-call.html'">
+            <h3>랜덤 영상통화</h3>
+            <p>영상으로 만나기</p>
+        </div>
+        <div class="menu-item" onclick="location.href='/notice'">
+            <h3>공지사항</h3>
+            <p>중요한 알림 확인</p>
+        </div>
+    </div>
+    
+    <div style="text-align:center; margin-top:32px;">
+        <button class="btn-video" onclick="window.location.href='video-call.html'">랜덤 영상통화 시작</button>
+    </div>
+</main>
+</body>
+</html>
+
