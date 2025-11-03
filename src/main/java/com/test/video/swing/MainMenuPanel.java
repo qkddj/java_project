@@ -27,7 +27,7 @@ public class MainMenuPanel extends JPanel {
         String[] menus = {
             "자유 게시판", "동네 소식", "동네 질문", "중고 거래",
             "분실물", "소모임", "퀴즈", "랜덤 채팅",
-            "공지사항"
+            "공지사항", "랜덤 영상통화"
         };
         
         for (String menu : menus) {
@@ -35,27 +35,17 @@ public class MainMenuPanel extends JPanel {
             btn.setPreferredSize(new Dimension(200, 80));
             btn.setFont(new Font("맑은 고딕", Font.PLAIN, 14));
             btn.addActionListener(e -> {
-                if (menu.equals("랜덤 채팅")) {
-                    JOptionPane.showMessageDialog(this, "준비 중입니다.");
+                if (menu.equals("랜덤 영상통화")) {
+                    parent.showVideoCall();
+                } else {
+                    JOptionPane.showMessageDialog(this, "아직 구현하지 않은 기능입니다.");
                 }
             });
             menuGrid.add(btn);
         }
         
-        // 영상통화 버튼
-        JButton videoBtn = new JButton("랜덤 영상통화");
-        videoBtn.setFont(new Font("맑은 고딕", Font.BOLD, 16));
-        videoBtn.setBackground(new Color(43, 100, 255));
-        videoBtn.setForeground(Color.WHITE);
-        videoBtn.setPreferredSize(new Dimension(300, 50));
-        videoBtn.addActionListener(e -> parent.showVideoCall());
-        
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.add(menuGrid, BorderLayout.CENTER);
-        
-        JPanel buttonPanel = new JPanel(new FlowLayout());
-        buttonPanel.add(videoBtn);
-        centerPanel.add(buttonPanel, BorderLayout.SOUTH);
         
         JScrollPane scrollPane = new JScrollPane(centerPanel);
         scrollPane.setBorder(null);

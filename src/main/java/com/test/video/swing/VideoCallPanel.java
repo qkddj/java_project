@@ -58,4 +58,3 @@ public class VideoCallPanel extends JPanel {
         add(fxPanel, BorderLayout.CENTER);
     }
 }
-
