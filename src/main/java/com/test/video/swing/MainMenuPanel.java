@@ -2,6 +2,8 @@ package com.test.video.swing;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.Desktop;
+import java.net.URI;
 
 public class MainMenuPanel extends JPanel {
     @SuppressWarnings("unused")
@@ -36,7 +38,14 @@ public class MainMenuPanel extends JPanel {
             btn.setFont(new Font("맑은 고딕", Font.PLAIN, 14));
             btn.addActionListener(e -> {
                 if (menu.equals("랜덤 영상통화")) {
-                    parent.showVideoCall();
+                    // 외부 브라우저로 열기 (카메라/마이크 지원)
+                    try {
+                        int port = parent.getServerPort();
+                        URI uri = new URI("http://localhost:" + port + "/video-call.html");
+                        Desktop.getDesktop().browse(uri);
+                    } catch (Exception ex) {
+                        JOptionPane.showMessageDialog(this, "브라우저를 열 수 없습니다: " + ex.getMessage());
+                    }
                 } else {
                     JOptionPane.showMessageDialog(this, "아직 구현하지 않은 기능입니다.");
                 }
