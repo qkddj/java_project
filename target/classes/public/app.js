@@ -29,6 +29,8 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       setStatus(`매칭됨 (room ${roomId.substring(0,8)})`);
+      // 상대 영상 연결 준비중: 대기 오버레이는 숨김
+      (function(){ const ph = document.getElementById('remotePlaceholder'); if (ph) ph.style.display = 'none'; })();
       await startWebRTC(true);
       break;
     case 'rtc.offer':
@@ -46,6 +48,7 @@ ws.addEventListener('message', async (ev) => {
       break;
     case 'callEnded':
       teardown('상대 종료');
+      (function(){ const ph = document.getElementById('remotePlaceholder'); if (ph) ph.style.display = ''; })();
       break;
   }
 });
@@ -89,6 +92,22 @@ async function ensurePc(){
     rv.srcObject = e.streams[0];
     // iOS 사파리는 사용자 제스처 이후에도 재생을 명시적으로 호출해야 할 때가 있음
     setTimeout(() => { rv.play().catch(()=>{}); }, 0);
+    const ph = document.getElementById('remotePlaceholder');
+    if (ph) ph.style.display = 'none';
+  };
+  pc.oniceconnectionstatechange = () => {
+    const state = pc.iceConnectionState;
+    const ph = document.getElementById('remotePlaceholder');
+    if (!ph) return;
+    if (state === 'connected' || state === 'completed') ph.style.display = 'none';
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') ph.style.display = '';
+  };
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    const ph = document.getElementById('remotePlaceholder');
+    if (!ph) return;
+    if (state === 'connected') ph.style.display = 'none';
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') ph.style.display = '';
   };
   pc.onicecandidate = (e) => e.candidate && wsSend({ type:'rtc.ice', roomId, data: e.candidate });
   const stream = await getMedia();
@@ -120,6 +139,8 @@ function teardown(reason){
   const rv = $('remoteVideo');
   if (lv) lv.srcObject = null;
   if (rv) rv.srcObject = null;
+  const ph = document.getElementById('remotePlaceholder');
+  if (ph) ph.style.display = '';
 }
 
 // UI
@@ -140,8 +161,6 @@ $('btnStart').onclick = async () => {
 };
 $('btnStop').onclick = () => wsSend({ type:'leaveQueue' });
 $('btnHangup').onclick = () => { if (roomId) wsSend({ type:'endCall', roomId }); teardown('수동 종료'); };
-const btnHangupTop = document.getElementById('btnHangupTop');
-if (btnHangupTop){ btnHangupTop.onclick = () => { if (roomId) wsSend({ type:'endCall', roomId }); teardown('수동 종료'); }; }
 
 $('btnMute').onclick = () => {
   const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);

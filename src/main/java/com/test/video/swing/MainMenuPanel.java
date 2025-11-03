@@ -63,4 +63,3 @@ public class MainMenuPanel extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
     }
 }
-

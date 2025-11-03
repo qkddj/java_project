@@ -36,4 +36,3 @@ public class SwingMain extends JFrame {
         });
     }
 }
-
