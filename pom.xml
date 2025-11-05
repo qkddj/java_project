@@ -32,7 +32,6 @@
             <version>${javafx.version}</version>
         </dependency>
 
-        <!-- Jetty HTTP/WebSocket 서버 -->
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-server</artifactId>
@@ -54,7 +53,6 @@
             <version>11.0.20</version>
         </dependency>
 
-        <!-- JSON 직렬화 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -86,7 +84,6 @@
                 </configuration>
             </plugin>
 
-            <!-- mvn exec:java -Dexec.mainClass=com.test.video.swing.SwingMain 로 실행 가능 -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>

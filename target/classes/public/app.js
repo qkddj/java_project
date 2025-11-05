@@ -17,7 +17,6 @@ function alertOnTrackEvents(track, label){
     alert(`${label} 장치 연결이 종료되었습니다.`);
   });
   track.addEventListener('mute', () => {
-    // 신호 중단(권한 차단/장치 문제) 알림
     alert(`${label}가 꺼졌습니다.`);
   });
   track.addEventListener('unmute', () => {
@@ -45,12 +44,11 @@ function startRemoteReadyWatchdog(){
   let attempts = 0;
   remoteReadyWatchdog = setInterval(() => {
     attempts++;
-    // 비디오 픽셀 크기 또는 트랙 live 여부로 판정
     if ((rv.videoWidth && rv.videoHeight) || (rv.srcObject && rv.srcObject.getVideoTracks && rv.srcObject.getVideoTracks().some(t=>t.readyState==='live'))) {
       showRemoteWaiting(false);
       clearInterval(remoteReadyWatchdog);
       remoteReadyWatchdog = null;
-    } else if (attempts > 40) { // ~12초 후 중지
+    } else if (attempts > 40) {
       clearInterval(remoteReadyWatchdog);
       remoteReadyWatchdog = null;
     }
@@ -70,7 +68,6 @@ ws.addEventListener('message', async (ev) => {
       userId = msg.userId;
       break;
     case 'enqueued':
-      // 총 대기 인원 표기: queueSize(본인 포함)
       if (typeof msg.queueSize === 'number') {
         setStatus(`대기중 (${msg.queueSize}명 대기)`);
       } else {
@@ -78,7 +75,6 @@ ws.addEventListener('message', async (ev) => {
       }
       break;
     case 'queueUpdate':
-      // 서버가 queueSize를 보내므로 이를 우선 사용
       if (typeof msg.queueSize === 'number') {
         setStatus(`대기중 (${msg.queueSize}명 대기)`);
       } else {
@@ -92,20 +88,17 @@ ws.addEventListener('message', async (ev) => {
       roomId = msg.roomId;
       peerId = msg.peerId;
       setStatus(`매칭됨 (room ${roomId.substring(0,8)})`);
-      // 상대 연결 대기 표시 유지 (실제 재생되면 자동으로 숨김)
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
-      // 같은 브라우저 두 탭에서의 glare 방지: 한쪽만 초기 offer 생성
-      // UUID 문자열 비교로 간단히 호출자 결정(작은 쪽이 caller)
+      
       const iAmCaller = (typeof userId === 'string' && typeof peerId === 'string')
         ? (userId.localeCompare(peerId) < 0)
-        : true; // 안전장치: 정보가 없으면 임시로 caller 처리
+        : true;
       await startWebRTC(iAmCaller);
       break;
     case 'rtc.offer':
       await ensurePc();
       try {
-        // glare 해결: 로컬 오퍼 중이면 롤백 후 원격 오퍼 수락
         if (pc.signalingState === 'have-local-offer') {
           await pc.setLocalDescription({ type: 'rollback' });
         }
@@ -213,7 +206,6 @@ async function ensurePc(){
     if (rv.muted !== true) rv.muted = true;
     if (!rv.hasAttribute('playsinline')) rv.setAttribute('playsinline','');
     rv.addEventListener('click', () => { try { rv.muted = false; rv.play().catch(()=>{}); } catch(_) {} }, { once:true });
-    // iOS 사파리는 사용자 제스처 이후에도 재생을 명시적으로 호출해야 할 때가 있음
     setTimeout(() => { rv.play().catch(()=>{}); hideOverlayIfVideoLive(); }, 0);
   };
   pc.oniceconnectionstatechange = () => {
@@ -240,7 +232,6 @@ async function startWebRTC(isCaller){
     await pc.setLocalDescription(offer);
     wsSend({ type:'rtc.offer', roomId, data: pc.localDescription });
   }
-  // 연결이 오래 걸리면(TURN 미설정 가능) 힌트 제공
   try {
     const hasTurn = !!(new URLSearchParams(location.search).get('turn') || localStorage.getItem('turnUrls'));
     setTimeout(() => {
@@ -270,7 +261,6 @@ function teardown(reason){
   showRemoteWaiting(true);
 }
 
-// 비디오 이벤트 기반으로도 오버레이 제어 (브라우저별 ontrack 순서 차이 보완)
 (function(){
   const rv = document.getElementById('remoteVideo');
   if (!rv) return;
@@ -279,7 +269,6 @@ function teardown(reason){
   });
 })();
 
-// UI
 $('btnStart').onclick = async () => {
   try {
     await getMedia();
@@ -312,8 +301,6 @@ $('btnCamera').onclick = () => {
   alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
 };
 
-// no TURN form events
 
-// chat removed
 
 

@@ -9,7 +9,7 @@ public class ServerLauncherWrapper {
     
     public void startServer() {
         if (serverThread != null && serverThread.isAlive()) {
-            return; // 이미 실행 중
+            return;
         }
         
         serverThread = new Thread(() -> {
@@ -23,7 +23,6 @@ public class ServerLauncherWrapper {
         serverThread.setDaemon(true);
         serverThread.start();
         
-        // 서버 시작 대기
         try {
             Thread.sleep(1000);
         } catch (InterruptedException e) {

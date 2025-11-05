@@ -54,12 +54,11 @@ public class MatchSocket implements WebSocketListener {
                 case "rtc.ice":
                     mm.forward(msg.get("roomId").asText(), userId, type, msg.get("data"));
                     break;
-                // chat removed
                 case "endCall":
                     mm.endCall(msg.get("roomId").asText(), "manual");
                     break;
                 default:
-                    // ignore
+                    
             }
         } catch (Exception e) {
             onWebSocketError(e);

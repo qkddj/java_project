@@ -12,11 +12,9 @@ public class SwingMain extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         
-        // 서버 백그라운드 시작
         serverLauncher = new ServerLauncherWrapper();
         serverLauncher.startServer();
         
-        // 메인 메뉴 패널
         MainMenuPanel menuPanel = new MainMenuPanel(this);
         add(menuPanel);
     }

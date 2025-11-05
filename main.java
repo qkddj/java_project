@@ -1,5 +1,3 @@
-// develop
-
 public class main {
     
 }

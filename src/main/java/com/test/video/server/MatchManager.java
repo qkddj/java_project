@@ -8,10 +8,6 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-
-/**
- * 간단한 인메모리 매칭 매니저(FIFO).
- */
 public class MatchManager {
 
     private static final MatchManager INSTANCE = new MatchManager();
@@ -33,7 +29,6 @@ public class MatchManager {
         if (userId != null) {
             userIdToSession.remove(userId);
             waitingQueue.remove(userId);
-            // 방에서 나가면 상대에게 종료 통지
             rooms.values().stream()
                 .filter(r -> r.hasUser(userId))
                 .findFirst()
@@ -44,7 +39,6 @@ public class MatchManager {
     public void enqueue(String userId) throws IOException {
         if (waitingQueue.contains(userId)) return;
         waitingQueue.add(userId);
-        // 본인 포함 총 대기 인원(queueSize)도 함께 전송
         send(userId, Json.message("enqueued")
                 .put("position", waitingQueue.size())
                 .put("queueSize", waitingQueue.size()));

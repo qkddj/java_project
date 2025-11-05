@@ -13,7 +13,6 @@ public class MainMenuPanel extends JPanel {
         this.parent = parent;
         setLayout(new BorderLayout());
         
-        // 헤더
         JPanel header = new JPanel();
         header.setBackground(new Color(43, 100, 255));
         header.setPreferredSize(new Dimension(0, 60));
@@ -22,7 +21,6 @@ public class MainMenuPanel extends JPanel {
         title.setFont(new Font("맑은 고딕", Font.BOLD, 20));
         header.add(title);
         
-        // 메뉴 그리드
         JPanel menuGrid = new JPanel(new GridLayout(0, 2, 16, 16));
         menuGrid.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
         
@@ -38,7 +36,6 @@ public class MainMenuPanel extends JPanel {
             btn.setFont(new Font("맑은 고딕", Font.PLAIN, 14));
             btn.addActionListener(e -> {
                 if (menu.equals("랜덤 영상통화")) {
-                    // 외부 브라우저로 열기 (카메라/마이크 지원)
                     try {
                         int port = parent.getServerPort();
                         URI uri = new URI("http://localhost:" + port + "/video-call.html");
