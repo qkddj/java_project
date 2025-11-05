@@ -44,7 +44,10 @@ public class MatchManager {
     public void enqueue(String userId) throws IOException {
         if (waitingQueue.contains(userId)) return;
         waitingQueue.add(userId);
-        send(userId, Json.message("enqueued").put("position", waitingQueue.size()));
+        // 본인 포함 총 대기 인원(queueSize)도 함께 전송
+        send(userId, Json.message("enqueued")
+                .put("position", waitingQueue.size())
+                .put("queueSize", waitingQueue.size()));
         broadcastQueuePositions();
         tryMatch();
     }
@@ -102,7 +105,10 @@ public class MatchManager {
         int idx = 0;
         for (String uid : waitingQueue) {
             idx++;
-            send(uid, Json.message("queueUpdate").put("position", idx).put("ahead", idx - 1).put("queueSize", waitingQueue.size()));
+            send(uid, Json.message("queueUpdate")
+                    .put("position", idx)
+                    .put("ahead", idx - 1)
+                    .put("queueSize", waitingQueue.size()));
         }
     }
 

@@ -70,10 +70,20 @@ ws.addEventListener('message', async (ev) => {
       userId = msg.userId;
       break;
     case 'enqueued':
-      setStatus(`대기중 (앞선 ${Math.max(0, (msg.position||1)-1)}명)`);
+      // 총 대기 인원 표기: queueSize(본인 포함)
+      if (typeof msg.queueSize === 'number') {
+        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+      } else {
+        setStatus(`대기중 (앞선 ${Math.max(0, (msg.position||1)-1)}명)`);
+      }
       break;
     case 'queueUpdate':
-      setStatus(`대기중 (앞선 ${msg.ahead||0}명)`);
+      // 서버가 queueSize를 보내므로 이를 우선 사용
+      if (typeof msg.queueSize === 'number') {
+        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+      } else {
+        setStatus(`대기중 (앞선 ${msg.ahead||0}명)`);
+      }
       break;
     case 'dequeued':
       setStatus('대기 종료');
