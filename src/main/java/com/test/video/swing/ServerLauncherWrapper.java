@@ -1,11 +1,9 @@
 package com.test.video.swing;
 
 import com.test.video.ServerLauncher;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerLauncherWrapper {
     private Thread serverThread;
-    private AtomicInteger port = new AtomicInteger(8080);
     
     public void startServer() {
         if (serverThread != null && serverThread.isAlive()) {
@@ -30,8 +28,6 @@ public class ServerLauncherWrapper {
         }
     }
     
-    public int getPort() {
-        return port.get();
-    }
+    public int getPort() { return 8080; }
 }
 

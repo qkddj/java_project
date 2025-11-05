@@ -1,17 +1,18 @@
 const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsScheme}://${location.host}/ws`);
 let userId, peerId, roomId, pc, localStream;
+let stayMatching = false;
 let remoteReadyWatchdog = null;
 let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
 
 const $ = (id) => document.getElementById(id);
-function showRemoteWaiting(show){
+function showRemoteWaiting(show) {
   const ph = document.getElementById('remotePlaceholder');
   if (!ph) return;
   ph.style.display = show ? '' : 'none';
 }
-function alertOnTrackEvents(track, label){
+function alertOnTrackEvents(track, label) {
   if (!track) return;
   track.addEventListener('ended', () => {
     alert(`${label} 장치 연결이 종료되었습니다.`);
@@ -23,28 +24,28 @@ function alertOnTrackEvents(track, label){
     alert(`${label}가 켜졌습니다.`);
   });
 }
-function attachLocalTrackAlerts(stream){
+function attachLocalTrackAlerts(stream) {
   try {
     stream.getAudioTracks().forEach(t => alertOnTrackEvents(t, '마이크'));
     stream.getVideoTracks().forEach(t => alertOnTrackEvents(t, '카메라'));
-  } catch (_) {}
+  } catch (_) { }
 }
-function hideOverlayIfVideoLive(){
+function hideOverlayIfVideoLive() {
   const rv = document.getElementById('remoteVideo');
   if (!rv) return;
   const stream = rv.srcObject;
-  if (stream && stream.getVideoTracks && stream.getVideoTracks().some(t=>t.readyState==='live')) {
+  if (stream && stream.getVideoTracks && stream.getVideoTracks().some(t => t.readyState === 'live')) {
     showRemoteWaiting(false);
   }
 }
-function startRemoteReadyWatchdog(){
+function startRemoteReadyWatchdog() {
   const rv = document.getElementById('remoteVideo');
   if (!rv) return;
   if (remoteReadyWatchdog) { clearInterval(remoteReadyWatchdog); remoteReadyWatchdog = null; }
   let attempts = 0;
   remoteReadyWatchdog = setInterval(() => {
     attempts++;
-    if ((rv.videoWidth && rv.videoHeight) || (rv.srcObject && rv.srcObject.getVideoTracks && rv.srcObject.getVideoTracks().some(t=>t.readyState==='live'))) {
+    if ((rv.videoWidth && rv.videoHeight) || (rv.srcObject && rv.srcObject.getVideoTracks && rv.srcObject.getVideoTracks().some(t => t.readyState === 'live'))) {
       showRemoteWaiting(false);
       clearInterval(remoteReadyWatchdog);
       remoteReadyWatchdog = null;
@@ -55,10 +56,8 @@ function startRemoteReadyWatchdog(){
   }, 300);
 }
 const statusEl = $('status');
-const chatList = $('chatList');
-const chatInput = $('chatInput');
 
-function setStatus(text){ statusEl.textContent = text; }
+function setStatus(text) { statusEl.textContent = text; }
 
 ws.addEventListener('open', () => setStatus('서버 연결됨'));
 ws.addEventListener('message', async (ev) => {
@@ -71,14 +70,14 @@ ws.addEventListener('message', async (ev) => {
       if (typeof msg.queueSize === 'number') {
         setStatus(`대기중 (${msg.queueSize}명 대기)`);
       } else {
-        setStatus(`대기중 (앞선 ${Math.max(0, (msg.position||1)-1)}명)`);
+        setStatus(`대기중 (앞선 ${Math.max(0, (msg.position || 1) - 1)}명)`);
       }
       break;
     case 'queueUpdate':
       if (typeof msg.queueSize === 'number') {
         setStatus(`대기중 (${msg.queueSize}명 대기)`);
       } else {
-        setStatus(`대기중 (앞선 ${msg.ahead||0}명)`);
+        setStatus(`대기중 (앞선 ${msg.ahead || 0}명)`);
       }
       break;
     case 'dequeued':
@@ -87,10 +86,10 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       peerId = msg.peerId;
-      setStatus(`매칭됨 (room ${roomId.substring(0,8)})`);
+      setStatus(`매칭됨 (room ${roomId.substring(0, 8)})`);
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
-      
+
       const iAmCaller = (typeof userId === 'string' && typeof peerId === 'string')
         ? (userId.localeCompare(peerId) < 0)
         : true;
@@ -104,7 +103,7 @@ ws.addEventListener('message', async (ev) => {
         }
         await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
         if (pendingRemoteCandidates.length) {
-          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch(_){} }
+          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch (_) { } }
           pendingRemoteCandidates = [];
         }
         const answer = await pc.createAnswer();
@@ -124,7 +123,7 @@ ws.addEventListener('message', async (ev) => {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
         if (pendingRemoteCandidates.length) {
-          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch(_){} }
+          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch (_) { } }
           pendingRemoteCandidates = [];
         }
         startRemoteReadyWatchdog();
@@ -135,22 +134,26 @@ ws.addEventListener('message', async (ev) => {
     case 'rtc.ice':
       if (msg.data) {
         if (pc && pc.remoteDescription) {
-          try { await pc.addIceCandidate(msg.data); } catch(e){ console.warn('addIceCandidate error', e); }
+          try { await pc.addIceCandidate(msg.data); } catch (e) { console.warn('addIceCandidate error', e); }
         } else {
           pendingRemoteCandidates.push(msg.data);
         }
       }
       break;
     case 'callEnded':
-      teardown('상대 종료');
+      teardown('상대 종료', stayMatching);
       showRemoteWaiting(true);
+      if (stayMatching) {
+        setStatus('다음 상대 대기중');
+        wsSend({ type: 'joinQueue' });
+      }
       break;
   }
 });
 
-function wsSend(o){ ws.readyState === 1 && ws.send(JSON.stringify(o)); }
+function wsSend(o) { ws.readyState === 1 && ws.send(JSON.stringify(o)); }
 
-async function getMedia(){
+async function getMedia() {
   if (localStream) {
     const hasLive = localStream.getTracks().some(t => t.readyState === 'live');
     if (hasLive) return localStream;
@@ -171,7 +174,7 @@ async function getMedia(){
   return localStream;
 }
 
-async function ensurePc(){
+async function ensurePc() {
   if (pc) return pc;
   const params = new URLSearchParams(location.search);
   const iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
@@ -186,7 +189,7 @@ async function ensurePc(){
       localStorage.setItem('turnUrls', turnUrls);
       localStorage.setItem('turnUser', turnUser || '');
       localStorage.setItem('turnPass', turnPass || '');
-    } catch (_) {}
+    } catch (_) { }
   } else {
     // 저장된 TURN 설정이 있으면 사용
     try {
@@ -197,16 +200,16 @@ async function ensurePc(){
         const urls = savedUrls.split(',').map(u => u.trim()).filter(Boolean);
         iceServers.push({ urls, username: savedUser, credential: savedPass });
       }
-    } catch (_) {}
+    } catch (_) { }
   }
   pc = new RTCPeerConnection({ iceServers });
   pc.ontrack = (e) => {
     const rv = $('remoteVideo');
     rv.srcObject = e.streams[0];
     if (rv.muted !== true) rv.muted = true;
-    if (!rv.hasAttribute('playsinline')) rv.setAttribute('playsinline','');
-    rv.addEventListener('click', () => { try { rv.muted = false; rv.play().catch(()=>{}); } catch(_) {} }, { once:true });
-    setTimeout(() => { rv.play().catch(()=>{}); hideOverlayIfVideoLive(); }, 0);
+    if (!rv.hasAttribute('playsinline')) rv.setAttribute('playsinline', '');
+    rv.addEventListener('click', () => { try { rv.muted = false; rv.play().catch(() => { }); } catch (_) { } }, { once: true });
+    setTimeout(() => { rv.play().catch(() => { }); hideOverlayIfVideoLive(); }, 0);
   };
   pc.oniceconnectionstatechange = () => {
     const state = pc.iceConnectionState;
@@ -218,19 +221,19 @@ async function ensurePc(){
     if (state === 'connected') hideOverlayIfVideoLive();
     if (state === 'disconnected' || state === 'failed' || state === 'closed') showRemoteWaiting(true);
   };
-  pc.onicecandidate = (e) => e.candidate && wsSend({ type:'rtc.ice', roomId, data: e.candidate });
+  pc.onicecandidate = (e) => e.candidate && wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
   const stream = await getMedia();
   stream.getAudioTracks().forEach(t => { micSender = pc.addTrack(t, stream); });
   stream.getVideoTracks().forEach(t => { camSender = pc.addTrack(t, stream); });
   return pc;
 }
 
-async function startWebRTC(isCaller){
+async function startWebRTC(isCaller) {
   await ensurePc();
-  if (isCaller){
+  if (isCaller) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    wsSend({ type:'rtc.offer', roomId, data: pc.localDescription });
+    wsSend({ type: 'rtc.offer', roomId, data: pc.localDescription });
   }
   try {
     const hasTurn = !!(new URLSearchParams(location.search).get('turn') || localStorage.getItem('turnUrls'));
@@ -241,30 +244,32 @@ async function startWebRTC(isCaller){
         alert('다른 와이파이/모바일망 간 연결에는 TURN 서버가 필요할 수 있습니다.\n예: https://YOUR_HTTPS_DOMAIN/video-call.html?turn=turn:TURN_HOST:3478&tu=USER&tp=PASS');
       }
     }, 8000);
-  } catch(_) {}
+  } catch (_) { }
 }
 
-function teardown(reason){
+function teardown(reason, keepLocal) {
   setStatus(`종료: ${reason}`);
-  if (pc){ pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); pc = null; }
+  if (pc) { pc.getSenders().forEach(s => s.track && s.track.stop()); pc.close(); pc = null; }
   roomId = null;
-  if (localStream){
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
+  if (!keepLocal) {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
   }
   micSender = null;
   camSender = null;
   const lv = $('localVideo');
   const rv = $('remoteVideo');
-  if (lv) lv.srcObject = null;
+  if (!keepLocal) { if (lv) lv.srcObject = null; }
   if (rv) rv.srcObject = null;
   showRemoteWaiting(true);
 }
 
-(function(){
+(function () {
   const rv = document.getElementById('remoteVideo');
   if (!rv) return;
-  ['loadedmetadata','loadeddata','canplay','playing'].forEach(ev => {
+  ['loadedmetadata', 'loadeddata', 'canplay', 'playing'].forEach(ev => {
     rv.addEventListener(ev, () => showRemoteWaiting(false));
   });
 })();
@@ -273,7 +278,7 @@ $('btnStart').onclick = async () => {
   try {
     await getMedia();
     const lv = $('localVideo');
-    if (lv) { try { await lv.play(); } catch (_) {} }
+    if (lv) { try { await lv.play(); } catch (_) { } }
   } catch (e) {
     alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n사유: ${e && e.name ? e.name : 'Unknown'} ${e && e.message ? e.message : ''}`);
     return;
@@ -282,10 +287,11 @@ $('btnStart').onclick = async () => {
     alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다. HTTPS 주소로 접속해 주세요.');
     return;
   }
-  wsSend({ type:'joinQueue' });
+  stayMatching = true;
+  wsSend({ type: 'joinQueue' });
 };
-$('btnStop').onclick = () => wsSend({ type:'leaveQueue' });
-$('btnHangup').onclick = () => { if (roomId) wsSend({ type:'endCall', roomId }); teardown('수동 종료'); };
+$('btnStop').onclick = () => { stayMatching = false; wsSend({ type: 'leaveQueue' }); };
+$('btnHangup').onclick = () => { if (roomId) wsSend({ type: 'endCall', roomId }); teardown('수동 종료'); };
 
 $('btnMute').onclick = () => {
   const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);

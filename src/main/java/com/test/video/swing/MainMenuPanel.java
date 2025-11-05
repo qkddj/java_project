@@ -6,11 +6,8 @@ import java.awt.Desktop;
 import java.net.URI;
 
 public class MainMenuPanel extends JPanel {
-    @SuppressWarnings("unused")
-    private SwingMain parent;
     
     public MainMenuPanel(SwingMain parent) {
-        this.parent = parent;
         setLayout(new BorderLayout());
         
         JPanel header = new JPanel();

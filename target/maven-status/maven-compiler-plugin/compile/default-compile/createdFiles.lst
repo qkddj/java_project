@@ -1,8 +1,10 @@
 com/test/video/server/MatchWebSocketCreator.class
 com/test/video/TestCamera.class
+com/test/video/swing/MainMenuPanel.class
 com/test/video/server/MatchManager$Room.class
 com/test/video/ServerLauncher.class
 com/test/video/server/MatchSocket.class
 com/test/video/swing/ServerLauncherWrapper.class
+com/test/video/swing/SwingMain.class
 com/test/video/server/MatchManager.class
 com/test/video/server/Json.class
