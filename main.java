@@ -1,5 +1,0 @@
-// login
-
-public class main {
-    
-}
