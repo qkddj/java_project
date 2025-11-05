@@ -1,6 +1,6 @@
 const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsScheme}://${location.host}/ws`);
-let userId, roomId, pc, localStream;
+let userId, peerId, roomId, pc, localStream;
 let remoteReadyWatchdog = null;
 let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
@@ -80,11 +80,17 @@ ws.addEventListener('message', async (ev) => {
       break;
     case 'matched':
       roomId = msg.roomId;
+      peerId = msg.peerId;
       setStatus(`매칭됨 (room ${roomId.substring(0,8)})`);
       // 상대 연결 대기 표시 유지 (실제 재생되면 자동으로 숨김)
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
-      await startWebRTC(true);
+      // 같은 브라우저 두 탭에서의 glare 방지: 한쪽만 초기 offer 생성
+      // UUID 문자열 비교로 간단히 호출자 결정(작은 쪽이 caller)
+      const iAmCaller = (typeof userId === 'string' && typeof peerId === 'string')
+        ? (userId.localeCompare(peerId) < 0)
+        : true; // 안전장치: 정보가 없으면 임시로 caller 처리
+      await startWebRTC(iAmCaller);
       break;
     case 'rtc.offer':
       await ensurePc();
@@ -169,9 +175,26 @@ async function ensurePc(){
   const turnUrls = params.get('turn');
   const turnUser = params.get('tu');
   const turnPass = params.get('tp');
+  // 우선 URL 파라미터 우선 적용
   if (turnUrls) {
     const urls = turnUrls.split(',').map(u => u.trim()).filter(Boolean);
     iceServers.push({ urls, username: turnUser || undefined, credential: turnPass || undefined });
+    try {
+      localStorage.setItem('turnUrls', turnUrls);
+      localStorage.setItem('turnUser', turnUser || '');
+      localStorage.setItem('turnPass', turnPass || '');
+    } catch (_) {}
+  } else {
+    // 저장된 TURN 설정이 있으면 사용
+    try {
+      const savedUrls = localStorage.getItem('turnUrls');
+      if (savedUrls) {
+        const savedUser = localStorage.getItem('turnUser') || undefined;
+        const savedPass = localStorage.getItem('turnPass') || undefined;
+        const urls = savedUrls.split(',').map(u => u.trim()).filter(Boolean);
+        iceServers.push({ urls, username: savedUser, credential: savedPass });
+      }
+    } catch (_) {}
   }
   pc = new RTCPeerConnection({ iceServers });
   pc.ontrack = (e) => {
@@ -207,6 +230,17 @@ async function startWebRTC(isCaller){
     await pc.setLocalDescription(offer);
     wsSend({ type:'rtc.offer', roomId, data: pc.localDescription });
   }
+  // 연결이 오래 걸리면(TURN 미설정 가능) 힌트 제공
+  try {
+    const hasTurn = !!(new URLSearchParams(location.search).get('turn') || localStorage.getItem('turnUrls'));
+    setTimeout(() => {
+      if (!pc) return;
+      const s = pc.iceConnectionState;
+      if ((s !== 'connected' && s !== 'completed') && !hasTurn) {
+        alert('다른 와이파이/모바일망 간 연결에는 TURN 서버가 필요할 수 있습니다.\n예: https://YOUR_HTTPS_DOMAIN/video-call.html?turn=turn:TURN_HOST:3478&tu=USER&tp=PASS');
+      }
+    }, 8000);
+  } catch(_) {}
 }
 
 function teardown(reason){
