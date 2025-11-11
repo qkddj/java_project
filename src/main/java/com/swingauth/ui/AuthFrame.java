@@ -127,15 +127,13 @@ public class AuthFrame extends JFrame {
           try {
             User u = get();
             if (u != null) {
-              String msg = "<html>로그인 성공!<br/>" +
-                  "아이디: " + u.username + "<br/>" +
-                  "최근 IP: " + (u.lastKnownIp != null ? u.lastKnownIp : "unknown") + "<br/>" +
-                  "지역: " + (u.neighborhood != null ? u.neighborhood : "unknown") + "<br/>" +
-                  "위치: " + (u.lat != null && u.lon != null ? u.lat + ", " + u.lon : "unknown") +
-                  "</html>";
-              JOptionPane.showMessageDialog(panel, msg, "환영합니다", JOptionPane.INFORMATION_MESSAGE);
-              status.setText("로그인 완료");
-              status.setForeground(new Color(0, 128, 0));
+              // ✅ 메인 화면으로 전환
+              SwingUtilities.invokeLater(() -> {
+                new MainFrame(u).setVisible(true);
+                // 현재 로그인 창 닫기
+                Window win = SwingUtilities.getWindowAncestor(panel);
+                if (win != null) win.dispose();
+              });
             }
           } catch (Exception ignored) {}
           submit.setEnabled(true);
