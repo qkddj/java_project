@@ -1,116 +1,115 @@
-// 파일 이름: ChatServer.java
-import java.net.*;
+// ChatServer.java
 import java.io.*;
+import java.net.*;
 import java.util.*;
-import java.util.concurrent.*;
 
 public class ChatServer {
     private static final int PORT = 5000;
-    private static final Queue<ClientHandler> waitingQueue = new ConcurrentLinkedQueue<>();
+    private static final List<ClientHandler> waiting = new ArrayList<>();
 
     public static void main(String[] args) {
-        System.out.println("[서버] 시작 – 포트 " + PORT);
+        System.out.println("[서버] 시작. 포트: " + PORT);
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("[서버] 리스닝 중...");
             while (true) {
-                Socket clientSocket = serverSocket.accept();
-                System.out.println("[서버] 클라이언트 접속: " + clientSocket.getRemoteSocketAddress());
-                ClientHandler handler = new ClientHandler(clientSocket);
-                new Thread(handler).start();
+                Socket socket = serverSocket.accept();
+                ClientHandler handler = new ClientHandler(socket);
+                handler.start(); // 각 클라이언트마다 스레드 시작 (대기 및 매칭 처리)
             }
         } catch (IOException e) {
-            System.err.println("[서버] 소켓 생성 오류: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    static class ClientHandler implements Runnable {
+    // 클라이언트 핸들러 (스레드)
+    private static class ClientHandler extends Thread {
         private Socket socket;
         private BufferedReader in;
         private PrintWriter out;
-        private ClientHandler partner;
+        private ClientHandler partner; // 매칭된 상대
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
+            try {
+                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
+                this.out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
+            } catch (IOException e) {
+                closeEverything();
+            }
         }
 
+        @Override
         public void run() {
             try {
-                in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(socket.getOutputStream(), true);
-
-                out.println("채팅 서버에 접속했습니다. 매칭을 기다리는 중...");
-                System.out.println("[핸들러] 클라이언트 대기 상태: " + socket.getRemoteSocketAddress());
-
-                waitingQueue.add(this);
-                matchPartner();
-
-                System.out.println("[핸들러] 메시지 송수신 시작: " + socket.getRemoteSocketAddress() +
-                                   " ↔ " + partner.socket.getRemoteSocketAddress());
-
-                String msg;
-                while ((msg = in.readLine()) != null) {
-                    msg = msg.trim();
-                    System.out.println("[받음][" + socket.getRemoteSocketAddress() + "] : " + msg);
-
-                    if ("exit".equalsIgnoreCase(msg)) {
-                        out.println("종료 명령 받음, 연결을 종료합니다.");
-                        System.out.println("[핸들러] 종료 명령 처리: " + socket.getRemoteSocketAddress());
-                        break;
-                    }
-                    if (partner != null) {
-                        System.out.println("[보냄][" + partner.socket.getRemoteSocketAddress() + "] : " + msg);
-                        partner.out.println("상대: " + msg);
+                // 매칭 프로세스
+                synchronized (waiting) {
+                    if (waiting.isEmpty()) {
+                        waiting.add(this);
+                        out.println("[서버] 접속 완료. 상대를 기다리는 중...");
+                        // 현재 스레드는 매칭될 때까지 기다림 (notify로 깨움)
+                        // wait는 synchronized 블록 안에서 호출되어야 함
+                        // 여기서는 synchronized(waiting) 블록을 끝내고 아래에서 동기화해서 기다림
                     } else {
-                        out.println("아직 상대가 없습니다. 잠시만 기다려주세요.");
-                        System.out.println("[핸들러] 상대 없음 상태: " + socket.getRemoteSocketAddress());
+                        // 짝이 있으면 바로 매칭
+                        ClientHandler other = waiting.remove(0);
+                        this.partner = other;
+                        other.partner = this;
+
+                        // 알림 전송
+                        this.out.println("[서버] 매칭 완료! 대화를 시작하세요.");
+                        other.out.println("[서버] 매칭 완료! 대화를 시작하세요.");
+                        
+                        // 다른 스레드가 run에서(read loop) 동작하도록 알림
+                        synchronized (other) {
+                            other.notify(); // other는 waiting에서 빠져나와 대기중일 수 있음
+                        }
+                    }
+                }
+
+                // 만약 아직 partner가 없으면 객체 자체에서 wait
+                synchronized (this) {
+                    while (this.partner == null) {
+                        try {
+                            this.wait(); // 매칭될 때까지 대기
+                        } catch (InterruptedException ignored) {}
+                    }
+                }
+
+                // partner가 설정되어 이제 양방향 중계 시작
+                String line;
+                while ((line = in.readLine()) != null) {
+                    // 상대가 존재하면 전달
+                    if (partner != null && partner.out != null) {
+                        partner.out.println("[상대] " + line);
+                    } else {
+                        out.println("[서버] 현재 상대가 없습니다.");
                     }
                 }
 
             } catch (IOException e) {
-                System.err.println("[핸들러] 오류 발생: " + socket.getRemoteSocketAddress() + " – " + e.getMessage());
-                e.printStackTrace();
+                // 읽기 중 예외 발생 (연결 끊김 등)
             } finally {
-                closeConnection();
-            }
-        }
-
-        private void matchPartner() {
-            System.out.println("[매칭] 대기열 크기: " + waitingQueue.size());
-            while (true) {
-                if (waitingQueue.size() >= 2) {
-                    ClientHandler first  = waitingQueue.poll();
-                    ClientHandler second = waitingQueue.poll();
-                    if (first != null && second != null && first != second) {
-                        first.partner  = second;
-                        second.partner = first;
-                        first.out.println("매칭 완료! 상대와 대화를 시작하세요.");
-                        second.out.println("매칭 완료! 상대와 대화를 시작하세요.");
-                        System.out.println("[매칭] " + first.socket.getRemoteSocketAddress()
-                                           + " ↔ " + second.socket.getRemoteSocketAddress());
-                        return;
-                    } else {
-                        if (first  != null) waitingQueue.offer(first);
-                        if (second != null) waitingQueue.offer(second);
-                    }
-                }
+                // 정리: 소켓 닫기 및 상대에게 알림
                 try {
-                    Thread.sleep(300);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    System.err.println("[매칭] 매칭 대기 중 인터럽트됨");
-                    return;
+                    if (partner != null && partner.out != null) {
+                        partner.out.println("[서버] 상대 연결이 종료되었습니다.");
+                        // 상대측 partner 참조 제거
+                        partner.partner = null;
+                    }
+                } catch (Exception ignored) {}
+
+                // 만약 아직 waiting 리스트에 남아있다면 제거
+                synchronized (waiting) {
+                    waiting.remove(this);
                 }
+
+                closeEverything();
             }
         }
 
-        private void closeConnection() {
-            try {
-                System.out.println("[핸들러] 연결 종료: " + socket.getRemoteSocketAddress());
-                socket.close();
-            } catch (IOException e) {
-                System.err.println("[핸들러] 소켓 닫기 실패: " + e.getMessage());
-            }
+        private void closeEverything() {
+            try { if (in != null) in.close(); } catch (IOException ignored) {}
+            try { if (out != null) out.close(); } catch (Exception ignored) {}
+            try { if (socket != null && !socket.isClosed()) socket.close(); } catch (IOException ignored) {}
         }
     }
 }
