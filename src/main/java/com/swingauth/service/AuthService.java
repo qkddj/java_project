@@ -61,23 +61,7 @@ public class AuthService {
       throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
     }
 
-    // 로그인 시점 최신 IP/위치 갱신
-    GeoService.GeoInfo g = geo.fetch();
-    Document update = new Document()
-        .append("lastLoginAt", new Date()) // ✅ Date로 저장
-        .append("lastKnownIp", g.ip)
-        .append("lat", g.lat)
-        .append("lon", g.lon)
-        .append("country", g.country)
-        .append("region", g.region)
-        .append("city", g.city)
-        .append("neighborhood", g.neighborhood);
-
-    users.updateOne(Filters.eq("username", uname), new Document("$set", update));
-
-    // 최신 상태 리턴
-    Document latest = users.find(Filters.eq("username", uname)).first();
-    return User.fromDoc(latest);
+    return User.fromDoc(found);
   }
 
   private String normalize(String s) {
