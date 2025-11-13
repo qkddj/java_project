@@ -6,6 +6,20 @@ let remoteReadyWatchdog = null;
 let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
 
+// 같은 브라우저의 다른 창/탭과 통신하기 위한 BroadcastChannel
+const broadcastChannel = typeof BroadcastChannel !== 'undefined' 
+  ? new BroadcastChannel('video-call-channel') 
+  : null;
+
+// 다른 창에서 닫기 메시지를 받으면 창 닫기
+if (broadcastChannel) {
+  broadcastChannel.onmessage = (event) => {
+    if (event.data === 'close-window') {
+      closeWindowAndCleanup();
+    }
+  };
+}
+
 const $ = (id) => document.getElementById(id);
 function showRemoteWaiting(show) {
   const ph = document.getElementById('remotePlaceholder');
@@ -291,6 +305,7 @@ function setupButtons() {
   const btnHangup = $('btnHangup');
   const btnMute = $('btnMute');
   const btnCamera = $('btnCamera');
+  const btnBack = $('btnBack');
 
   if (btnStart) {
     btnStart.onclick = async () => {
@@ -346,6 +361,56 @@ function setupButtons() {
       if (!track) { alert('카메라 트랙이 없습니다.'); return; }
       track.enabled = !track.enabled;
       alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
+    };
+  }
+
+function closeWindowAndCleanup() {
+  // 통화 중이면 통화 종료
+  if (roomId) {
+    wsSend({ type: 'endCall', roomId });
+  }
+  
+  // 매칭 중이면 대기열에서 제거
+  if (stayMatching) {
+    wsSend({ type: 'leaveQueue' });
+  }
+  stayMatching = false;
+  
+  // 모든 리소스 정리
+  teardown('메인으로 나가기', false);
+  showHangupButton(false);
+  
+  // WebSocket 연결 종료
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.close();
+  }
+  
+  // BroadcastChannel 닫기
+  if (broadcastChannel) {
+    broadcastChannel.close();
+  }
+  
+  // 창 닫기 시도
+  setTimeout(() => {
+    window.close();
+    // 창이 닫히지 않으면 페이지를 빈 페이지로 변경
+    setTimeout(() => {
+      if (!document.hidden) {
+        document.body.innerHTML = '<div style="padding:20px;text-align:center;"><h2>영상통화가 종료되었습니다.</h2><p>이 창을 닫아주세요.</p></div>';
+      }
+    }, 200);
+  }, 100);
+}
+
+  if (btnBack) {
+    btnBack.onclick = () => {
+      // 다른 모든 창에 닫기 메시지 전송
+      if (broadcastChannel) {
+        broadcastChannel.postMessage('close-window');
+      }
+      
+      // 현재 창도 닫기
+      closeWindowAndCleanup();
     };
   }
 }
