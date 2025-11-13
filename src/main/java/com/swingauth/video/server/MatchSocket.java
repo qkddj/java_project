@@ -24,7 +24,6 @@ public class MatchSocket implements WebSocketListener {
         try {
             if (message.startsWith("{\"type\":\"joinQueue\"")) {
                 manager.enqueue(this);
-                manager.tryMatch();
             } else if (message.startsWith("{\"type\":\"leaveQueue\"")) {
                 manager.dequeue(this);
             } else if (message.contains("\"type\":\"rtc.")) {
