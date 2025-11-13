@@ -59,6 +59,13 @@ const statusEl = $('status');
 
 function setStatus(text) { statusEl.textContent = text; }
 
+function showHangupButton(show) {
+  const btnHangup = $('btnHangup');
+  if (btnHangup) {
+    btnHangup.classList.toggle('hidden', !show);
+  }
+}
+
 ws.addEventListener('open', () => setStatus('서버 연결됨'));
 ws.addEventListener('message', async (ev) => {
   const msg = JSON.parse(ev.data);
@@ -72,6 +79,7 @@ ws.addEventListener('message', async (ev) => {
       } else {
         setStatus(`대기중 (앞선 ${Math.max(0, (msg.position || 1) - 1)}명)`);
       }
+      showHangupButton(true);
       break;
     case 'queueUpdate':
       if (typeof msg.queueSize === 'number') {
@@ -79,9 +87,11 @@ ws.addEventListener('message', async (ev) => {
       } else {
         setStatus(`대기중 (앞선 ${msg.ahead || 0}명)`);
       }
+      showHangupButton(true);
       break;
     case 'dequeued':
       setStatus('대기 종료');
+      showHangupButton(false);
       break;
     case 'matched':
       roomId = msg.roomId;
@@ -146,6 +156,9 @@ ws.addEventListener('message', async (ev) => {
       if (stayMatching) {
         setStatus('다음 상대 대기중');
         wsSend({ type: 'joinQueue' });
+        showHangupButton(true);
+      } else {
+        showHangupButton(false);
       }
       break;
   }
@@ -272,36 +285,74 @@ function teardown(reason, keepLocal) {
   });
 })();
 
-$('btnStart').onclick = async () => {
-  try {
-    await getMedia();
-    const lv = $('localVideo');
-    if (lv) { try { await lv.play(); } catch (_) { } }
-  } catch (e) {
-    alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n사유: ${e && e.name ? e.name : 'Unknown'} ${e && e.message ? e.message : ''}`);
-    return;
-  }
-  if (!isSecureContext && location.hostname !== 'localhost') {
-    alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다. HTTPS 주소로 접속해 주세요.');
-    return;
-  }
-  stayMatching = true;
-  wsSend({ type: 'joinQueue' });
-};
-$('btnStop').onclick = () => { stayMatching = false; wsSend({ type: 'leaveQueue' }); };
-$('btnHangup').onclick = () => { if (roomId) wsSend({ type: 'endCall', roomId }); teardown('수동 종료'); };
+function setupButtons() {
+  const btnStart = $('btnStart');
+  const btnStop = $('btnStop');
+  const btnHangup = $('btnHangup');
+  const btnMute = $('btnMute');
+  const btnCamera = $('btnCamera');
 
-$('btnMute').onclick = () => {
-  const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);
-  if (!track) { alert('마이크 트랙이 없습니다.'); return; }
-  track.enabled = !track.enabled;
-  alert(track.enabled ? '마이크가 켜졌습니다.' : '마이크가 꺼졌습니다.');
-};
+  if (btnStart) {
+    btnStart.onclick = async () => {
+      try {
+        await getMedia();
+        const lv = $('localVideo');
+        if (lv) { try { await lv.play(); } catch (_) { } }
+      } catch (e) {
+        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n사유: ${e && e.name ? e.name : 'Unknown'} ${e && e.message ? e.message : ''}`);
+        return;
+      }
+      if (!isSecureContext && location.hostname !== 'localhost') {
+        alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다. HTTPS 주소로 접속해 주세요.');
+        return;
+      }
+      stayMatching = true;
+      wsSend({ type: 'joinQueue' });
+    };
+  }
 
-$('btnCamera').onclick = () => {
-  const track = (camSender && camSender.track) || (localStream && localStream.getVideoTracks()[0]);
-  if (!track) { alert('카메라 트랙이 없습니다.'); return; }
-  track.enabled = !track.enabled;
-  alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
-};
+  if (btnStop) {
+    btnStop.onclick = () => { 
+      stayMatching = false; 
+      wsSend({ type: 'leaveQueue' }); 
+      showHangupButton(false);
+    };
+  }
+
+  if (btnHangup) {
+    btnHangup.onclick = () => { 
+      stayMatching = false;
+      if (roomId) {
+        wsSend({ type: 'endCall', roomId }); 
+      }
+      wsSend({ type: 'leaveQueue' });
+      teardown('수동 종료', false);
+      showHangupButton(false);
+    };
+  }
+
+  if (btnMute) {
+    btnMute.onclick = () => {
+      const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);
+      if (!track) { alert('마이크 트랙이 없습니다.'); return; }
+      track.enabled = !track.enabled;
+      alert(track.enabled ? '마이크가 켜졌습니다.' : '마이크가 꺼졌습니다.');
+    };
+  }
+
+  if (btnCamera) {
+    btnCamera.onclick = () => {
+      const track = (camSender && camSender.track) || (localStream && localStream.getVideoTracks()[0]);
+      if (!track) { alert('카메라 트랙이 없습니다.'); return; }
+      track.enabled = !track.enabled;
+      alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
+    };
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupButtons);
+} else {
+  setupButtons();
+}
 

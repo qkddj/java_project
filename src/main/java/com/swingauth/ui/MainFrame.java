@@ -112,8 +112,7 @@ public class MainFrame extends JFrame {
         JOptionPane.showMessageDialog(this, "랜덤 채팅 기능은 추후 연결 예정", "알림", JOptionPane.INFORMATION_MESSAGE));
     btnVideo.addActionListener(e -> {
         SwingUtilities.invokeLater(() -> {
-            VideoCallFrame videoFrame = new VideoCallFrame();
-            videoFrame.setVisible(true);
+            new VideoCallFrame();
         });
     });
 
