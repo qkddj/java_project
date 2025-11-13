@@ -110,8 +110,11 @@ public class MainFrame extends JFrame {
 
     btnChat.addActionListener(e ->
         JOptionPane.showMessageDialog(this, "랜덤 채팅 기능은 추후 연결 예정", "알림", JOptionPane.INFORMATION_MESSAGE));
-    btnVideo.addActionListener(e ->
-        JOptionPane.showMessageDialog(this, "랜덤 영상 통화 기능은 추후 연결 예정", "알림", JOptionPane.INFORMATION_MESSAGE));
+    btnVideo.addActionListener(e -> {
+        SwingUtilities.invokeLater(() -> {
+            new VideoCallFrame();
+        });
+    });
 
     bottom.add(btnChat);
     bottom.add(btnVideo);
