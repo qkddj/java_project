@@ -1,6 +1,7 @@
 package com.swingauth.ui;
 
 import com.swingauth.model.User;
+import io.socket.client.Socket;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
@@ -108,8 +109,17 @@ public class MainFrame extends JFrame {
     btnChat.setBorder(new LineBorder(Color.BLACK, 2, true));
     btnVideo.setBorder(new LineBorder(Color.BLACK, 2, true));
 
-    btnChat.addActionListener(e ->
-        JOptionPane.showMessageDialog(this, "랜덤 채팅 기능은 추후 연결 예정", "알림", JOptionPane.INFORMATION_MESSAGE));
+    btnChat.addActionListener(e -> {
+        MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
+        matchingFrameRef[0] = new MatchingFrame(() -> {
+            // 매칭 완료 시 채팅 화면 열기 (소켓 전달)
+            SwingUtilities.invokeLater(() -> {
+                Socket socket = matchingFrameRef[0].getSocket();
+                new RandomChatFrame(socket).setVisible(true);
+            });
+        });
+        matchingFrameRef[0].setVisible(true);
+    });
     btnVideo.addActionListener(e -> {
         SwingUtilities.invokeLater(() -> {
             new VideoCallFrame();
