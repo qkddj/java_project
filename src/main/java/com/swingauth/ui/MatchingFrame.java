@@ -100,14 +100,21 @@ public class MatchingFrame extends JFrame {
 
             socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
                 SwingUtilities.invokeLater(() -> {
-                    statusLabel.setText("서버 연결 실패 - 재연결 시도 중...");
                     Exception error = args.length > 0 && args[0] instanceof Exception 
                         ? (Exception) args[0] 
                         : null;
-                    System.out.println("Socket 연결 오류: " + (error != null ? error.getMessage() : "알 수 없음"));
+                    String errorMsg = error != null ? error.getMessage() : "알 수 없음";
+                    System.out.println("Socket 연결 오류: " + errorMsg);
+                    System.out.println("연결 시도한 서버: " + ServerConfig.getServerURL());
                     if (error != null) {
                         error.printStackTrace();
                     }
+                    
+                    String statusMsg = "서버 연결 실패: " + errorMsg;
+                    if (errorMsg.contains("Connection refused") || errorMsg.contains("connect")) {
+                        statusMsg += "\n서버가 실행 중인지 확인하세요.";
+                    }
+                    statusLabel.setText(statusMsg);
                 });
             });
 
