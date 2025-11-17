@@ -5,6 +5,8 @@ import com.corundumstudio.socketio.listener.ConnectListener;
 import com.corundumstudio.socketio.listener.DisconnectListener;
 import org.json.JSONObject;
 
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -37,7 +39,8 @@ public class ChatServer {
             return;
         }
         Configuration config = new Configuration();
-        config.setHostname("localhost");
+        // 0.0.0.0으로 설정하여 모든 네트워크 인터페이스에서 접근 가능하도록 함
+        config.setHostname("0.0.0.0");
         config.setPort(port);
         
         // CORS 설정
@@ -117,6 +120,9 @@ public class ChatServer {
             server.start();
             isRunning = true;
             System.out.println("채팅 서버가 포트 " + port + "에서 시작되었습니다.");
+            System.out.println("서버 주소: http://0.0.0.0:" + port);
+            System.out.println("다른 컴퓨터에서 접속하려면 서버 컴퓨터의 IP 주소를 사용하세요.");
+            printLocalIPAddresses();
         } catch (Exception e) {
             isRunning = false;
             System.err.println("채팅 서버 시작 실패: " + e.getMessage());
@@ -190,6 +196,31 @@ public class ChatServer {
 
     public int getPort() {
         return port;
+    }
+    
+    /**
+     * 로컬 네트워크 IP 주소들을 출력
+     */
+    private void printLocalIPAddresses() {
+        try {
+            System.out.println("사용 가능한 네트워크 주소:");
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress address = addresses.nextElement();
+                    if (!address.isLoopbackAddress() && address.getHostAddress().indexOf(':') == -1) {
+                        System.out.println("  - http://" + address.getHostAddress() + ":" + port);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("IP 주소 출력 실패: " + e.getMessage());
+        }
     }
 }
 

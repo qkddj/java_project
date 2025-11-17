@@ -1,5 +1,6 @@
 package com.swingauth.ui;
 
+import com.swingauth.config.ServerConfig;
 import io.socket.client.IO;
 import io.socket.client.Socket;
 
@@ -81,7 +82,7 @@ public class MatchingFrame extends JFrame {
                     .setReconnectionDelay(1000)
                     .setTimeout(20000)
                     .build();
-            socket = IO.socket("http://localhost:3001", options);
+            socket = IO.socket(ServerConfig.getServerURL(), options);
 
             socket.on(Socket.EVENT_CONNECT, args -> {
                 SwingUtilities.invokeLater(() -> {
