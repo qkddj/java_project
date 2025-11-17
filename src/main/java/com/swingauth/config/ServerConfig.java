@@ -20,14 +20,14 @@ public class ServerConfig {
         String propHost = System.getProperty("chat.server.host");
         String propPort = System.getProperty("chat.server.port");
         
-        // 우선순위: 시스템 속성 > 환경 변수 > 기본값(localhost)
+        // 우선순위: 시스템 속성 > 환경 변수 > 자동 감지(네트워크 IP)
         if (propHost != null && !propHost.isEmpty()) {
             serverHost = propHost;
         } else if (envHost != null && !envHost.isEmpty()) {
             serverHost = envHost;
         } else {
-            // 기본값: localhost (같은 컴퓨터에서 실행)
-            serverHost = DEFAULT_SERVER_HOST;
+            // 기본값: 로컬 IP 사용 (서버가 시작되면 Main에서 자동으로 설정됨)
+            serverHost = detectLocalIP();
         }
         
         if (propPort != null && !propPort.isEmpty()) {
