@@ -16,7 +16,7 @@ public class ChatServer {
                 handler.start(); // 각 클라이언트마다 스레드 시작 (대기 및 매칭 처리)
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            e.printStackTrace();r
         }
     }
 
