@@ -5,6 +5,8 @@ let stayMatching = false;
 let remoteReadyWatchdog = null;
 let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
+let partnerUsername = null; // 상대방 username 저장
+let currentUsername = null; // 현재 유저의 username
 
 // 같은 브라우저의 다른 창/탭과 통신하기 위한 BroadcastChannel
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' 
@@ -80,7 +82,19 @@ function showHangupButton(show) {
   }
 }
 
-ws.addEventListener('open', () => setStatus('서버 연결됨'));
+// URL에서 username 가져오기
+const urlParams = new URLSearchParams(location.search);
+currentUsername = urlParams.get('username') || 'unknown';
+
+ws.addEventListener('open', () => {
+  setStatus('서버 연결됨');
+  console.log('WebSocket 연결됨, username:', currentUsername);
+  // WebSocket 연결 시 username 등록
+  if (currentUsername && currentUsername !== 'unknown') {
+    console.log('Username 등록 전송:', currentUsername);
+    wsSend({ type: 'registerUsername', username: currentUsername });
+  }
+});
 ws.addEventListener('message', async (ev) => {
   const msg = JSON.parse(ev.data);
   switch (msg.type) {
@@ -110,6 +124,8 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       peerId = msg.peerId;
+      partnerUsername = msg.partnerUsername || null; // 상대방 username 저장
+      console.log('매칭 완료! roomId:', roomId, 'partnerUsername:', partnerUsername);
       setStatus(`매칭됨 (room ${roomId.substring(0, 8)})`);
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
@@ -165,6 +181,11 @@ ws.addEventListener('message', async (ev) => {
       }
       break;
     case 'callEnded':
+      // 평점 입력 (통화가 있었던 경우)
+      if (partnerUsername && roomId) {
+        showRatingDialog();
+      }
+      
       teardown('상대 종료', stayMatching);
       showRemoteWaiting(true);
       if (stayMatching) {
@@ -174,6 +195,8 @@ ws.addEventListener('message', async (ev) => {
       } else {
         showHangupButton(false);
       }
+      // 다음 매칭을 위해 partnerUsername 초기화
+      partnerUsername = null;
       break;
   }
 });
@@ -188,9 +211,17 @@ async function getMedia() {
     localStream = null;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    const hint = !isSecureContext && location.hostname !== 'localhost'
-      ? 'HTTPS가 아닌 주소입니다. https 주소(예: ngrok URL)로 접속해야 합니다.'
-      : '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
+    let hint = '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
+    if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      hint = 'HTTPS가 필요합니다!\n\n' +
+             '다른 디바이스에서 카메라/마이크를 사용하려면 HTTPS가 필요합니다.\n\n' +
+             '해결 방법:\n' +
+             '1. ngrok 사용 (권장):\n' +
+             '   - ngrok 설치: https://ngrok.com/\n' +
+             '   - 터미널에서: ngrok http 8080\n' +
+             '   - 표시된 https://xxx.ngrok.io URL 사용\n\n' +
+             '2. 또는 서버 컴퓨터에서 localhost로 접속 (카메라 사용 가능)';
+    }
     throw new Error('mediaDevices_unavailable: ' + hint);
   }
   localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -322,6 +353,7 @@ function setupButtons() {
         return;
       }
       stayMatching = true;
+      console.log('joinQueue 전송');
       wsSend({ type: 'joinQueue' });
     };
   }
@@ -340,6 +372,12 @@ function setupButtons() {
       if (roomId) {
         wsSend({ type: 'endCall', roomId }); 
       }
+      
+      // 평점 입력
+      if (partnerUsername) {
+        showRatingDialog();
+      }
+      
       wsSend({ type: 'leaveQueue' });
       teardown('수동 종료', false);
       showHangupButton(false);
@@ -364,10 +402,44 @@ function setupButtons() {
     };
   }
 
+function showRatingDialog() {
+  const rating = prompt(
+    `상대방(${partnerUsername})에 대한 만족도를 평가해주세요.\n\n` +
+    `1점: 매우 불만족\n` +
+    `2점: 불만족\n` +
+    `3점: 보통\n` +
+    `4점: 만족\n` +
+    `5점: 매우 만족\n\n` +
+    `1~5점 중 선택:`,
+    "5"
+  );
+  
+  if (rating && rating >= 1 && rating <= 5) {
+    submitRating(parseInt(rating));
+  }
+}
+
+function submitRating(rating) {
+  if (partnerUsername && ws && ws.readyState === WebSocket.OPEN) {
+    wsSend({
+      type: 'submitRating',
+      partnerUsername: partnerUsername,
+      rating: rating,
+      serviceType: 'video'
+    });
+    console.log('평점 전송: ' + partnerUsername + ' -> ' + rating + '점');
+  }
+}
+
 function closeWindowAndCleanup() {
   // 통화 중이면 통화 종료
   if (roomId) {
     wsSend({ type: 'endCall', roomId });
+  }
+  
+  // 평점 입력 (통화가 있었던 경우)
+  if (partnerUsername && roomId) {
+    showRatingDialog();
   }
   
   // 매칭 중이면 대기열에서 제거

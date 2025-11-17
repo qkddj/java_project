@@ -1,5 +1,6 @@
 package com.swingauth.db;
 
+import com.mongodb.MongoCommandException;
 import com.mongodb.MongoWriteException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
@@ -30,6 +31,10 @@ public class Mongo {
     return getDb().getCollection("posts");
   }
 
+  public static MongoCollection<Document> ratings() {
+    return getDb().getCollection("ratings");
+  }
+
   private static void ensureIndexes() {
     try {
       users().createIndex(Indexes.ascending("username"),
@@ -41,5 +46,37 @@ public class Mongo {
     posts().createIndex(Indexes.descending("board", "createdAt"),
         new IndexOptions().name("board_createdAt_desc"));
     posts().createIndex(Indexes.ascending("authorUsername"));
+
+    // 기존에 있던 잘못된 인덱스 삭제 시도
+    try {
+      ratings().dropIndex("uniq_sessionId");
+    } catch (Exception ignored) {}
+    
+    // 평점 인덱스: 유저 쌍과 서비스 타입으로 유니크 제약
+    try {
+      ratings().createIndex(
+          Indexes.ascending("user1Id", "user2Id", "serviceType"),
+          new IndexOptions().unique(true).name("uniq_user_pair_service"));
+    } catch (MongoWriteException | MongoCommandException ignored) {}
+    
+    try {
+      ratings().createIndex(Indexes.ascending("user1Id"), 
+          new IndexOptions().name("idx_user1Id"));
+    } catch (MongoWriteException | MongoCommandException ignored) {}
+    
+    try {
+      ratings().createIndex(Indexes.ascending("user2Id"), 
+          new IndexOptions().name("idx_user2Id"));
+    } catch (MongoWriteException | MongoCommandException ignored) {}
+    
+    try {
+      ratings().createIndex(Indexes.ascending("serviceType"), 
+          new IndexOptions().name("idx_serviceType"));
+    } catch (MongoWriteException | MongoCommandException ignored) {}
+    
+    try {
+      ratings().createIndex(Indexes.descending("createdAt"), 
+          new IndexOptions().name("idx_createdAt_desc"));
+    } catch (MongoWriteException | MongoCommandException ignored) {}
   }
 }
