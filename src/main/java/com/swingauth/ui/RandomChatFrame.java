@@ -10,6 +10,8 @@ import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
+import javax.swing.text.html.HTMLDocument;
+import javax.swing.text.html.HTMLEditorKit;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -21,7 +23,7 @@ import java.util.Date;
 
 public class RandomChatFrame extends JFrame {
     private Socket socket;
-    private JTextArea chatArea;
+    private JTextPane chatArea;
     private JTextField inputField;
     private JButton sendButton;
     private JLabel charCountLabel;
@@ -45,11 +47,26 @@ public class RandomChatFrame extends JFrame {
         add(topPanel, BorderLayout.NORTH);
 
         // 중앙: 채팅 영역
-        chatArea = new JTextArea();
+        chatArea = new JTextPane();
         chatArea.setEditable(false);
+        chatArea.setContentType("text/html");
         chatArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         chatArea.setBorder(new LineBorder(Color.BLACK, 1));
         chatArea.setBackground(Color.WHITE);
+        // HTML 문서 초기화
+        HTMLEditorKit kit = new HTMLEditorKit();
+        HTMLDocument doc = (HTMLDocument) kit.createDefaultDocument();
+        chatArea.setEditorKit(kit);
+        chatArea.setDocument(doc);
+        // 기본 스타일 설정
+        String style = "body { font-family: sans-serif; font-size: 14px; margin: 0; padding: 5px; }";
+        kit.getStyleSheet().addRule(style);
+        // 초기 HTML 구조 설정
+        try {
+            chatArea.setText("<html><body></body></html>");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         JScrollPane scrollPane = new JScrollPane(chatArea);
         scrollPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         add(scrollPane, BorderLayout.CENTER);
@@ -280,15 +297,53 @@ public class RandomChatFrame extends JFrame {
     private void addMessage(String sender, String text, boolean isMine) {
         SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
         String time = sdf.format(new Date());
-        String message = String.format("[%s] %s: %s\n", time, sender, text);
         
-        if (isMine) {
-            chatArea.append(message);
-        } else {
-            chatArea.append(message);
+        // HTML 이스케이프 처리
+        String escapedText = text.replace("&", "&amp;")
+                                 .replace("<", "&lt;")
+                                 .replace(">", "&gt;")
+                                 .replace("\"", "&quot;");
+        
+        // 메시지 형식 그대로 유지: [시간] 발신자: 메시지
+        String messageText = String.format("[%s] %s: %s", time, sender, escapedText);
+        
+        // 정렬 설정: 내 메시지는 오른쪽, 상대방/시스템 메시지는 왼쪽
+        String alignment = isMine ? "right" : "left";
+        String htmlMessage = String.format(
+            "<div style='text-align: %s;'>%s</div>",
+            alignment, messageText
+        );
+        
+        try {
+            // 기존 내용 가져오기
+            String currentContent = chatArea.getText();
+            String bodyContent = "";
+            
+            // body 태그 내용 추출
+            if (currentContent.contains("<body>") && currentContent.contains("</body>")) {
+                int bodyStart = currentContent.indexOf("<body>") + 6;
+                int bodyEnd = currentContent.indexOf("</body>");
+                bodyContent = currentContent.substring(bodyStart, bodyEnd);
+            }
+            
+            // 새 메시지 추가
+            String newContent = "<html><body>" + bodyContent + htmlMessage + "</body></html>";
+            chatArea.setText(newContent);
+            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+        } catch (Exception e) {
+            e.printStackTrace();
+            // 오류 발생 시 일반 텍스트로 추가
+            String fallbackMessage = String.format("[%s] %s: %s\n", time, sender, text);
+            String currentText = chatArea.getText();
+            if (currentText.contains("<body>") && currentText.contains("</body>")) {
+                int bodyStart = currentText.indexOf("<body>") + 6;
+                int bodyEnd = currentText.indexOf("</body>");
+                String bodyContent = currentText.substring(bodyStart, bodyEnd);
+                chatArea.setText("<html><body>" + bodyContent + fallbackMessage + "</body></html>");
+            } else {
+                chatArea.setText("<html><body>" + fallbackMessage + "</body></html>");
+            }
         }
-        
-        chatArea.setCaretPosition(chatArea.getDocument().getLength());
     }
 
     private void closeWindow() {
@@ -299,7 +354,7 @@ public class RandomChatFrame extends JFrame {
             // 소켓 연결은 유지 - disconnect() 호출하지 않음
         }
         // 채팅 메시지 초기화
-        chatArea.setText("");
+        chatArea.setText("<html><body></body></html>");
         dispose();
     }
 }
