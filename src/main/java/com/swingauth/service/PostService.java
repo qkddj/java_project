@@ -106,43 +106,34 @@ public class PostService {
   }
 
   /** 좋아요 (한 유저당 한 번만 가능) */
-  public int like(User user, String postId) {
-    if (postId == null)
-      throw new IllegalArgumentException("postId 누락");
-    if (user == null || user.username == null)
-      throw new IllegalArgumentException("사용자 정보 누락");
-
+  public int toggleLike(User user, String postId) {
     ObjectId oid = new ObjectId(postId);
 
-    // 이미 좋아요 눌렀는지 확인
-    Document existing = likes.find(
-        Filters.and(
-            Filters.eq("postId", oid),
-            Filters.eq("username", user.username)
-        )
-    ).first();
+    Document filter = new Document("postId", postId)
+            .append("username", user.username);
 
-    if (existing != null) {
-      // 이미 좋아요 한 사람
-      throw new IllegalStateException("이미 좋아요를 누른 게시글입니다.");
+    Document found = Mongo.likes().find(filter).first();
+
+    if (found == null) {
+        // 좋아요 추가
+        Mongo.likes().insertOne(filter.append("createdAt", new Date()));
+
+        Mongo.posts().updateOne(
+            Filters.eq("_id", oid),
+            new Document("$inc", new Document("likesCount", 1))
+        );
+    } else {
+        // 좋아요 취소
+        Mongo.likes().deleteOne(filter);
+
+        Mongo.posts().updateOne(
+            Filters.eq("_id", oid),
+            new Document("$inc", new Document("likesCount", -1))
+        );
     }
 
-    // 좋아요 추가
-    likes.insertOne(new Document()
-        .append("postId", oid)
-        .append("username", user.username)
-        .append("createdAt", new Date())
-    );
-
-    // 좋아요 수 재계산
-    long count = likes.countDocuments(Filters.eq("postId", oid));
-
-    posts.updateOne(
-        Filters.eq("_id", oid),
-        new Document("$set", new Document("likesCount", (int) count))
-    );
-
-    return (int) count;
+    Document post = Mongo.posts().find(Filters.eq("_id", oid)).first();
+    return post != null ? post.getInteger("likesCount", 0) : 0;
   }
 
   public Post getById(String id) {

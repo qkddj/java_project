@@ -342,7 +342,7 @@ public class BoardFrame extends JFrame {
     // ===== 버튼 액션들 =====
     btnLike.addActionListener(e -> {
       try {
-        int newLikes = postService.like(user, p.id);
+        int newLikes = postService.toggleLike(user, p.id);
         data.likesCount = newLikes;
         refreshCommentsAndInfo.run();
         resetAndLoad(); // 목록 카드 숫자 갱신
