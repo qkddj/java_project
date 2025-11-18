@@ -1,5 +1,6 @@
 package com.swingauth.ui;
 
+import com.swingauth.comment.Comment;
 import com.swingauth.comment.CommentService;
 import com.swingauth.model.Post;
 import com.swingauth.model.User;
@@ -51,7 +52,7 @@ public class BoardFrame extends JFrame {
     setLocationRelativeTo(null);
     setLayout(new BorderLayout());
 
-    // 상단: 제목 + 유저/지역
+    // ===== 상단: 보드명 + 사용자/지역 =====
     JPanel top = new JPanel(new BorderLayout());
     top.setBorder(new EmptyBorder(10, 12, 0, 12));
 
@@ -65,7 +66,7 @@ public class BoardFrame extends JFrame {
     top.add(title, BorderLayout.WEST);
     top.add(who, BorderLayout.EAST);
 
-    // 검색 + 글쓰기 영역
+    // ===== 검색 + 글쓰기 영역 =====
     JPanel searchPanel = new JPanel(new BorderLayout(8, 8));
     searchPanel.setBorder(new EmptyBorder(8, 0, 8, 0));
 
@@ -86,7 +87,6 @@ public class BoardFrame extends JFrame {
     btnNew.addActionListener(e -> openNewPostDialog());
 
     searchPanel.add(searchField, BorderLayout.CENTER);
-
     JPanel spRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
     spRight.add(btnSearch);
     spRight.add(btnNew);
@@ -97,7 +97,7 @@ public class BoardFrame extends JFrame {
     northWrap.add(searchPanel, BorderLayout.SOUTH);
     add(northWrap, BorderLayout.NORTH);
 
-    // 카드 목록 패널 (스크롤 안)
+    // ===== 카드 목록 패널 =====
     cardsPanel = new JPanel();
     cardsPanel.setLayout(new BoxLayout(cardsPanel, BoxLayout.Y_AXIS));
     cardsPanel.setBorder(new EmptyBorder(8, 12, 8, 12));
@@ -106,7 +106,7 @@ public class BoardFrame extends JFrame {
     scrollPane.getVerticalScrollBar().setUnitIncrement(16);
     add(scrollPane, BorderLayout.CENTER);
 
-    // 스크롤 페이징: 끝 근처 도달 시 loadMore()
+    // 스크롤 페이징
     scrollPane.getVerticalScrollBar().addAdjustmentListener(e -> {
       if (loading || noMore) return;
       JScrollBar sb = scrollPane.getVerticalScrollBar();
@@ -118,7 +118,7 @@ public class BoardFrame extends JFrame {
       }
     });
 
-    // 하단 닫기 버튼 정도
+    // ===== 하단 버튼 =====
     JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
     JButton btnRefresh = new JButton("새로고침");
     JButton btnClose = new JButton("닫기");
@@ -188,7 +188,7 @@ public class BoardFrame extends JFrame {
     }.execute();
   }
 
-  /** 게시글 카드 UI 생성 */
+  /** 게시글 카드 UI 생성 (높이 고정) */
   private void addPostCard(CardData data) {
     Post p = data.post;
 
@@ -199,21 +199,17 @@ public class BoardFrame extends JFrame {
     ));
     card.setBackground(Color.WHITE);
 
-    // 🔹 카드 높이 고정 (원하는 높이로 조절 가능)
-    int CARD_HEIGHT = 80; // << 여기 숫자 바꾸면 높이 바뀜
+    int CARD_HEIGHT = 80;
     card.setPreferredSize(new Dimension(10, CARD_HEIGHT));
-    card.setMaximumSize(new Dimension(Integer.MAX_VALUE, CARD_HEIGHT)); // 폭은 쭉, 높이는 고정
+    card.setMaximumSize(new Dimension(Integer.MAX_VALUE, CARD_HEIGHT));
 
-    // 제목
     JLabel titleLabel = new JLabel(p.title != null ? p.title : "(제목 없음)");
     titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
 
-    // 본문 요약 (30자 제한)
     String body = p.content != null ? p.content : "";
     String summary = body.length() > 30 ? body.substring(0, 30) + "..." : body;
     JLabel summaryLabel = new JLabel(summary);
 
-    // 메타 정보: 댓글 수, 좋아요 수, 등록일, 작성자
     String timeStr = formatCreatedAt(p.createdAt);
     String meta = String.format("댓글 %d  |  좋아요 %d  |  %s  |  %s",
         data.commentCount,
@@ -233,16 +229,17 @@ public class BoardFrame extends JFrame {
 
     card.add(center, BorderLayout.CENTER);
 
-    // 카드 클릭 → 상세 보기
     card.addMouseListener(new java.awt.event.MouseAdapter() {
       @Override
       public void mouseClicked(java.awt.event.MouseEvent e) {
         openPostDetail(data);
       }
+
       @Override
       public void mouseEntered(java.awt.event.MouseEvent e) {
         card.setBackground(new Color(245, 245, 255));
       }
+
       @Override
       public void mouseExited(java.awt.event.MouseEvent e) {
         card.setBackground(Color.WHITE);
@@ -250,64 +247,169 @@ public class BoardFrame extends JFrame {
     });
 
     cardsPanel.add(card);
-    cardsPanel.add(Box.createVerticalStrut(8)); // 카드 사이 간격
+    cardsPanel.add(Box.createVerticalStrut(8));
   }
 
-  /** 상세 보기 (간단 버전 – 제목/내용/댓글수/좋아요수 표시) */
+  /** 상세 보기: JDialog 안에서 댓글 입력/등록 가능, 창은 닫기 누를 때만 닫힘 */
   private void openPostDetail(CardData data) {
     Post p = data.post;
 
-    JTextArea area = new JTextArea(p.content == null ? "" : p.content);
-    area.setEditable(false);
-    area.setLineWrap(true);
-    area.setWrapStyleWord(true);
-    area.setBorder(new EmptyBorder(8, 8, 8, 8));
+    // 모달 다이얼로그
+    JDialog dialog = new JDialog(this, p.title, true);
+    dialog.setSize(720, 600);
+    dialog.setLocationRelativeTo(this);
+    dialog.setLayout(new BorderLayout());
 
-    JScrollPane sp = new JScrollPane(area);
-    sp.setPreferredSize(new Dimension(600, 350));
+    // 상단 정보 라벨
+    JLabel infoLabel = new JLabel();
+    infoLabel.setBorder(new EmptyBorder(4, 8, 4, 8));
 
-    String info = String.format("댓글 %d  |  좋아요 %d  |  %s  |  %s",
-        data.commentCount,
-        data.likesCount,
-        formatCreatedAt(p.createdAt),
-        p.authorUsername
-    );
+    // 본문 영역
+    JTextArea contentArea = new JTextArea(p.content == null ? "" : p.content);
+    contentArea.setEditable(false);
+    contentArea.setLineWrap(true);
+    contentArea.setWrapStyleWord(true);
+    contentArea.setBorder(new EmptyBorder(8, 8, 8, 8));
+    JScrollPane contentScroll = new JScrollPane(contentArea);
+    contentScroll.setPreferredSize(new Dimension(680, 220));
 
-    JPanel panel = new JPanel(new BorderLayout(4, 4));
-    panel.add(new JLabel(info), BorderLayout.NORTH);
-    panel.add(sp, BorderLayout.CENTER);
+    // 댓글 목록 영역
+    JTextArea commentArea = new JTextArea();
+    commentArea.setEditable(false);
+    commentArea.setLineWrap(true);
+    commentArea.setWrapStyleWord(true);
+    commentArea.setBorder(new EmptyBorder(4, 8, 8, 8));
+    JScrollPane commentScroll = new JScrollPane(commentArea);
+    commentScroll.setPreferredSize(new Dimension(680, 160));
 
-    Object[] options;
+    // 새 댓글 입력 영역
+    JTextArea newCommentArea = new JTextArea(3, 40);
+    newCommentArea.setLineWrap(true);
+    newCommentArea.setWrapStyleWord(true);
+    JScrollPane newCommentScroll = new JScrollPane(newCommentArea);
+    newCommentScroll.setPreferredSize(new Dimension(680, 80));
+
+    // 중앙 패널 (본문 + 댓글 + 새 댓글)
+    JPanel centerPanel = new JPanel();
+    centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+    centerPanel.setBorder(new EmptyBorder(4, 8, 8, 8));
+    centerPanel.add(contentScroll);
+    centerPanel.add(Box.createVerticalStrut(8));
+    centerPanel.add(new JLabel("댓글 목록"));
+    centerPanel.add(commentScroll);
+    centerPanel.add(Box.createVerticalStrut(8));
+    centerPanel.add(new JLabel("새 댓글"));
+    centerPanel.add(newCommentScroll);
+
+    dialog.add(infoLabel, BorderLayout.NORTH);
+    dialog.add(centerPanel, BorderLayout.CENTER);
+
     boolean isOwner = p.authorUsername != null && p.authorUsername.equals(user.username);
-    if (isOwner) {
-      options = new Object[]{"좋아요", "수정", "닫기"};
-    } else {
-      options = new Object[]{"좋아요", "닫기"};
+
+    JButton btnLike = new JButton("좋아요");
+    JButton btnEdit = new JButton("수정");
+    JButton btnComment = new JButton("댓글 등록");
+    JButton btnClose = new JButton("닫기");
+
+    if (!isOwner) {
+      btnEdit.setEnabled(false);
     }
 
-    int res = JOptionPane.showOptionDialog(
-        this,
-        panel,
-        p.title,
-        JOptionPane.DEFAULT_OPTION,
-        JOptionPane.PLAIN_MESSAGE,
-        null,
-        options,
-        options[0]
-    );
+    // info 라벨/댓글 영역 갱신용 헬퍼
+    Runnable refreshCommentsAndInfo = () -> {
+      List<Comment> comments = commentService.listByPostId(p.id, 200);
+      StringBuilder sb = new StringBuilder();
+      for (Comment c : comments) {
+        sb.append(c.authorUsername)
+            .append(" : ")
+            .append(c.content)
+            .append("\n");
+      }
+      commentArea.setText(sb.toString());
+      data.commentCount = comments.size();
 
-    if (res == 0) {
-      // 좋아요 +1
-      int newLikes = postService.increaseLikes(p.id);
-      data.likesCount = newLikes;
-      resetAndLoad(); // 다시 로드해서 카드 갱신
-    } else if (isOwner && res == 1) {
-      // 수정
+      String info = String.format("댓글 %d  |  좋아요 %d  |  %s  |  %s",
+          data.commentCount,
+          data.likesCount,
+          formatCreatedAt(p.createdAt),
+          p.authorUsername
+      );
+      infoLabel.setText(info);
+    };
+
+    refreshCommentsAndInfo.run();
+
+    // ===== 버튼 액션들 =====
+    btnLike.addActionListener(e -> {
+      try {
+        int newLikes = postService.like(user, p.id);
+        data.likesCount = newLikes;
+        refreshCommentsAndInfo.run();
+        resetAndLoad(); // 목록 카드 숫자 갱신
+      } catch (IllegalStateException ex) {
+        JOptionPane.showMessageDialog(dialog, ex.getMessage(),
+            "알림", JOptionPane.INFORMATION_MESSAGE);
+      } catch (Exception ex) {
+        JOptionPane.showMessageDialog(dialog,
+            "좋아요 실패: " + ex.getMessage(),
+            "오류", JOptionPane.ERROR_MESSAGE);
+      }
+    });
+
+    btnEdit.addActionListener(e -> {
+      if (!isOwner) return;
       openEditPostDialog(p);
-    }
+
+      // 수정 후 DB에서 다시 읽어서 내용 갱신
+      Post reloaded = postService.getById(p.id);
+      if (reloaded != null) {
+        p.title = reloaded.title;
+        p.content = reloaded.content;
+        contentArea.setText(p.content == null ? "" : p.content);
+        dialog.setTitle(p.title);
+      }
+      resetAndLoad();
+    });
+
+    btnComment.addActionListener(e -> {
+      String text = newCommentArea.getText();
+      if (text == null || text.trim().isEmpty()) {
+        JOptionPane.showMessageDialog(dialog, "댓글 내용을 입력하세요.",
+            "알림", JOptionPane.INFORMATION_MESSAGE);
+        return;
+      }
+
+      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+      new SwingWorker<Void, Void>() {
+        @Override
+        protected Void doInBackground() {
+          commentService.create(p.id, user.username, text.trim());
+          return null;
+        }
+
+        @Override
+        protected void done() {
+          setCursor(Cursor.getDefaultCursor());
+          newCommentArea.setText("");
+          refreshCommentsAndInfo.run();
+          resetAndLoad(); // 목록의 댓글 수 갱신
+        }
+      }.execute();
+    });
+
+    btnClose.addActionListener(e -> dialog.dispose());
+
+    JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+    bottomPanel.add(btnLike);
+    bottomPanel.add(btnEdit);
+    bottomPanel.add(btnComment);
+    bottomPanel.add(btnClose);
+    dialog.add(bottomPanel, BorderLayout.SOUTH);
+
+    dialog.setVisible(true);
   }
 
-  /** 새 글 작성 팝업 */
+  /** 새 글 작성 */
   private void openNewPostDialog() {
     JTextField tfTitle = new JTextField();
     JTextArea taContent = new JTextArea(10, 40);
@@ -322,7 +424,8 @@ public class BoardFrame extends JFrame {
     panel.add(new JScrollPane(taContent), BorderLayout.CENTER);
     panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-    int ok = JOptionPane.showConfirmDialog(this, panel, "새 글 작성", JOptionPane.OK_CANCEL_OPTION);
+    int ok = JOptionPane.showConfirmDialog(this, panel, "새 글 작성",
+        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
     if (ok != JOptionPane.OK_OPTION) return;
 
     String title = tfTitle.getText();
@@ -330,18 +433,21 @@ public class BoardFrame extends JFrame {
 
     setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
     new SwingWorker<Void, Void>() {
-      @Override protected Void doInBackground() {
+      @Override
+      protected Void doInBackground() {
         postService.create(user, boardName, title, content);
         return null;
       }
-      @Override protected void done() {
+
+      @Override
+      protected void done() {
         setCursor(Cursor.getDefaultCursor());
         resetAndLoad();
       }
     }.execute();
   }
 
-  /** 게시글 수정 팝업 (본인 글만) */
+  /** 게시글 수정 (본인 글만) */
   private void openEditPostDialog(Post p) {
     JTextField tfTitle = new JTextField(p.title);
     JTextArea taContent = new JTextArea(p.content, 10, 40);
@@ -356,7 +462,8 @@ public class BoardFrame extends JFrame {
     panel.add(new JScrollPane(taContent), BorderLayout.CENTER);
     panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-    int ok = JOptionPane.showConfirmDialog(this, panel, "게시글 수정", JOptionPane.OK_CANCEL_OPTION);
+    int ok = JOptionPane.showConfirmDialog(this, panel, "게시글 수정",
+        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
     if (ok != JOptionPane.OK_OPTION) return;
 
     String newTitle = tfTitle.getText();
@@ -364,23 +471,21 @@ public class BoardFrame extends JFrame {
 
     setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
     new SwingWorker<Void, Void>() {
-      @Override protected Void doInBackground() {
+      @Override
+      protected Void doInBackground() {
         postService.update(p, newTitle, newContent);
         return null;
       }
-      @Override protected void done() {
+
+      @Override
+      protected void done() {
         setCursor(Cursor.getDefaultCursor());
         resetAndLoad();
       }
     }.execute();
   }
 
-  /** 등록일시 포맷:
-   *  - 1분 이내: "방금 전"
-   *  - 1시간 이내: "n분 전"
-   *  - 24시간 이내: "n시간 전"
-   *  - 이후: "MM/dd"
-   */
+  /** 등록일시 포맷 */
   private String formatCreatedAt(Date createdAt) {
     if (createdAt == null) return "";
     long now = System.currentTimeMillis();

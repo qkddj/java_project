@@ -1,10 +1,12 @@
 package com.swingauth.db;
 
+import com.mongodb.MongoCommandException;
 import com.mongodb.MongoWriteException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 public class Mongo {
   private static MongoClient client;
@@ -30,27 +32,55 @@ public class Mongo {
     return getDb().getCollection("posts");
   }
 
-  // ★ 댓글용 컬렉션
   public static MongoCollection<Document> comments() {
     return getDb().getCollection("comments");
   }
 
-  private static void ensureIndexes() {
+  public static MongoCollection<Document> likes() {
+    return getDb().getCollection("likes");
+  }
+
+  /** 인덱스 만들 때 충돌(이미 존재 등)은 그냥 무시하는 헬퍼 */
+  private static void safeCreateIndex(MongoCollection<Document> coll, Bson keys, IndexOptions options) {
     try {
-      users().createIndex(Indexes.ascending("username"),
-          new IndexOptions().unique(true).name("uniq_username"));
-    } catch (MongoWriteException ignored) {}
+      coll.createIndex(keys, options);
+    } catch (MongoWriteException | MongoCommandException ignored) {
+      // 인덱스 이미 존재하거나 옵션 충돌 시 무시
+    } catch (Exception ignored) {
+    }
+  }
 
-    users().createIndex(Indexes.ascending("createdAt"));
+  private static void safeCreateIndex(MongoCollection<Document> coll, Bson keys) {
+    try {
+      coll.createIndex(keys);
+    } catch (MongoWriteException | MongoCommandException ignored) {
+    } catch (Exception ignored) {
+    }
+  }
 
-    // 게시글: 게시판 + 생성일 역순 정렬 인덱스
-    posts().createIndex(Indexes.descending("board", "createdAt"),
-        new IndexOptions().name("board_createdAt_desc"));
-    posts().createIndex(Indexes.ascending("authorUsername"));
+  private static void ensureIndexes() {
+    // users
+    safeCreateIndex(
+        users(),
+        Indexes.ascending("username"),
+        new IndexOptions().unique(true).name("uniq_username")
+    );
+    safeCreateIndex(users(), Indexes.ascending("createdAt"));
 
-    // 댓글: postId + createdAt 인덱스
-    comments().createIndex(Indexes.ascending("postId"));
-    comments().createIndex(Indexes.descending("postId", "createdAt"),
-        new IndexOptions().name("post_createdAt_desc"));
+    // posts: 게시판 + 생성일 역순
+    safeCreateIndex(posts(), Indexes.descending("board", "createdAt"));
+    safeCreateIndex(posts(), Indexes.ascending("authorUsername"));
+
+    // comments: postId + createdAt
+    safeCreateIndex(comments(), Indexes.ascending("postId"));
+    safeCreateIndex(comments(), Indexes.descending("postId", "createdAt"));
+
+    // likes: (postId, username) 유니크 = 한 유저당 한 번만 좋아요
+    safeCreateIndex(
+        likes(),
+        Indexes.ascending("postId", "username"),
+        new IndexOptions().unique(true).name("uniq_post_user_like")
+    );
+    safeCreateIndex(likes(), Indexes.ascending("postId"));
   }
 }

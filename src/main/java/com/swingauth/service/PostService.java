@@ -8,8 +8,8 @@ import com.swingauth.db.Mongo;
 import com.swingauth.model.Post;
 import com.swingauth.model.User;
 import org.bson.Document;
-import org.bson.types.ObjectId;
 import org.bson.conversions.Bson;
+import org.bson.types.ObjectId;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 public class PostService {
 
   private final MongoCollection<Document> posts = Mongo.posts();
+  private final MongoCollection<Document> likes = Mongo.likes(); // ★ 좋아요 컬렉션
 
   /** 게시판 + 지역 + 검색어 기반 목록 (페이징) */
   public List<Post> listByBoard(User user, String board, String keyword, int skip, int limit) {
@@ -33,7 +34,8 @@ public class PostService {
 
     if (keyword != null && !keyword.isBlank()) {
       String kw = keyword.trim();
-      Pattern regex = Pattern.compile(Pattern.quote(kw), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+      Pattern regex = Pattern.compile(Pattern.quote(kw),
+          Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
       filters.add(Filters.or(
           Filters.regex("title", regex),
           Filters.regex("content", regex)
@@ -47,7 +49,10 @@ public class PostService {
         .skip(skip)
         .limit(limit)
         .iterator()) {
-      while (cur.hasNext()) list.add(Post.fromDoc(cur.next()));
+
+      while (cur.hasNext()) {
+        list.add(Post.fromDoc(cur.next()));
+      }
     }
     return list;
   }
@@ -82,8 +87,10 @@ public class PostService {
     String t = (newTitle == null ? "" : newTitle.trim());
     String c = (newContent == null ? "" : newContent.trim());
 
-    if (t.isBlank()) throw new IllegalArgumentException("제목을 입력하세요.");
-    if (c.isBlank()) throw new IllegalArgumentException("내용을 입력하세요.");
+    if (t.isBlank())
+      throw new IllegalArgumentException("제목을 입력하세요.");
+    if (c.isBlank())
+      throw new IllegalArgumentException("내용을 입력하세요.");
 
     posts.updateOne(
         Filters.eq("_id", new ObjectId(p.id)),
@@ -98,25 +105,44 @@ public class PostService {
     return p;
   }
 
-  /** 좋아요 수 증가(간단 버전: 사용자 구분 없이 +1만) */
-  public int increaseLikes(String postId) {
-    if (postId == null) throw new IllegalArgumentException("postId 누락");
+  /** 좋아요 (한 유저당 한 번만 가능) */
+  public int like(User user, String postId) {
+    if (postId == null)
+      throw new IllegalArgumentException("postId 누락");
+    if (user == null || user.username == null)
+      throw new IllegalArgumentException("사용자 정보 누락");
+
     ObjectId oid = new ObjectId(postId);
 
-    Document found = posts.find(Filters.eq("_id", oid)).first();
-    if (found == null) throw new IllegalArgumentException("게시글이 없습니다.");
+    // 이미 좋아요 눌렀는지 확인
+    Document existing = likes.find(
+        Filters.and(
+            Filters.eq("postId", oid),
+            Filters.eq("username", user.username)
+        )
+    ).first();
 
-    int current = 0;
-    Object lc = found.get("likesCount");
-    if (lc instanceof Number) current = ((Number) lc).intValue();
-    int next = current + 1;
+    if (existing != null) {
+      // 이미 좋아요 한 사람
+      throw new IllegalStateException("이미 좋아요를 누른 게시글입니다.");
+    }
+
+    // 좋아요 추가
+    likes.insertOne(new Document()
+        .append("postId", oid)
+        .append("username", user.username)
+        .append("createdAt", new Date())
+    );
+
+    // 좋아요 수 재계산
+    long count = likes.countDocuments(Filters.eq("postId", oid));
 
     posts.updateOne(
         Filters.eq("_id", oid),
-        new Document("$set", new Document("likesCount", next))
+        new Document("$set", new Document("likesCount", (int) count))
     );
 
-    return next;
+    return (int) count;
   }
 
   public Post getById(String id) {
