@@ -12,8 +12,9 @@ public class Post {
   public String title;
   public String content;
   public String authorUsername;
-  public String neighborhood;      // 지역(옵션)
+  public String neighborhood;      // 지역
   public Date createdAt;
+  public Integer likesCount;       // ★ 좋아요 수 (기본 0)
 
   public Document toDoc() {
     return new Document()
@@ -22,7 +23,8 @@ public class Post {
         .append("content", content)
         .append("authorUsername", authorUsername)
         .append("neighborhood", neighborhood)
-        .append("createdAt", createdAt != null ? createdAt : new Date());
+        .append("createdAt", createdAt != null ? createdAt : new Date())
+        .append("likesCount", likesCount != null ? likesCount : 0);
   }
 
   public static Post fromDoc(Document d) {
@@ -37,15 +39,20 @@ public class Post {
     p.neighborhood = d.getString("neighborhood");
     Object ca = d.get("createdAt");
     if (ca instanceof Date) p.createdAt = (Date) ca;
+
+    Object lc = d.get("likesCount");
+    if (lc instanceof Number) p.likesCount = ((Number) lc).intValue();
+    else p.likesCount = 0;
+
     return p;
   }
 
   @Override
   public String toString() {
-    // 리스트에서 예쁘게 보이도록 제목 + 날짜
+    // 디버그용
     String date = (createdAt != null)
         ? new SimpleDateFormat("yyyy-MM-dd HH:mm").format(createdAt)
         : "";
-    return "[" + board + "] " + title + "  —  " + date;
+    return "[" + board + "] " + title + " (" + authorUsername + ", " + date + ")";
   }
 }
