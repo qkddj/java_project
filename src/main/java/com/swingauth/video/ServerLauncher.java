@@ -201,7 +201,6 @@ public class ServerLauncher {
         // DefaultServlet 추가 (정적 파일 서빙)
         ServletHolder defaultServlet = new ServletHolder("default", DefaultServlet.class);
         defaultServlet.setInitParameter("dirAllowed", "false");
-        defaultServlet.setInitParameter("pathInfoOnly", "true");
         context.addServlet(defaultServlet, "/");
 
         server.setHandler(context);

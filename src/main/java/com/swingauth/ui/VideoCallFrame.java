@@ -41,11 +41,16 @@ public class VideoCallFrame extends JFrame {
         // 외부 브라우저로 열기 (더 나은 WebRTC 지원)
         SwingUtilities.invokeLater(() -> {
             try {
-                String url = "http://localhost:" + port + "/video-call.html";
+                // URL을 명확하게 구성하여 이중 슬래시 방지
+                StringBuilder urlBuilder = new StringBuilder();
+                urlBuilder.append("http://localhost:").append(port).append("/video-call.html");
+                
                 // username을 URL 파라미터로 전달
-                if (finalUser != null && finalUser.username != null) {
-                    url += "?username=" + java.net.URLEncoder.encode(finalUser.username, "UTF-8");
+                if (finalUser != null && finalUser.username != null && !finalUser.username.isEmpty()) {
+                    urlBuilder.append("?username=").append(java.net.URLEncoder.encode(finalUser.username, "UTF-8"));
                 }
+                
+                String url = urlBuilder.toString();
                 URI uri = new URI(url);
                 Desktop.getDesktop().browse(uri);
             } catch (Exception ex) {
