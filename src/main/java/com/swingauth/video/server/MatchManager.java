@@ -108,11 +108,32 @@ public class MatchManager {
             // 두 사용자가 모두 유효하면 매칭
             String roomId = UUID.randomUUID().toString();
             
-            // username 가져오기
-            String user1Username = userIdToUsername.getOrDefault(user1.getUserId(), "unknown");
-            String user2Username = userIdToUsername.getOrDefault(user2.getUserId(), "unknown");
+            // username 가져오기 (맵에서 먼저 확인, 없으면 MatchSocket의 username 필드 확인)
+            String user1Username = userIdToUsername.get(user1.getUserId());
+            if (user1Username == null || user1Username.isEmpty() || "unknown".equals(user1Username)) {
+                user1Username = user1.getUsername();
+                if (user1Username != null && !user1Username.isEmpty() && !"unknown".equals(user1Username)) {
+                    // MatchSocket의 username이 있으면 맵에도 저장
+                    userIdToUsername.put(user1.getUserId(), user1Username);
+                } else {
+                    user1Username = "unknown";
+                }
+            }
+            
+            String user2Username = userIdToUsername.get(user2.getUserId());
+            if (user2Username == null || user2Username.isEmpty() || "unknown".equals(user2Username)) {
+                user2Username = user2.getUsername();
+                if (user2Username != null && !user2Username.isEmpty() && !"unknown".equals(user2Username)) {
+                    // MatchSocket의 username이 있으면 맵에도 저장
+                    userIdToUsername.put(user2.getUserId(), user2Username);
+                } else {
+                    user2Username = "unknown";
+                }
+            }
             
             System.out.println("매칭 완료: " + user1Username + " <-> " + user2Username);
+            System.out.println("  user1 userId: " + user1.getUserId() + ", username: " + user1Username);
+            System.out.println("  user2 userId: " + user2.getUserId() + ", username: " + user2Username);
             
             Room room = new Room(roomId, user1, user2);
             rooms.put(roomId, room);

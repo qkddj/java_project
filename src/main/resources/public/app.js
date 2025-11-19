@@ -84,26 +84,39 @@ function showHangupButton(show) {
 }
 
 // URL에서 username 가져오기
-// 주소창에는 "unknown"으로 표시되지만, 실제 username은 URL fragment (#)에서 가져옴
 const urlParams = new URLSearchParams(location.search);
-const urlUsername = urlParams.get('username') || 'unknown';
-const hashUsername = location.hash ? decodeURIComponent(location.hash.substring(1)) : null;
-currentUsername = (hashUsername && hashUsername !== 'unknown') ? hashUsername : urlUsername;
+currentUsername = urlParams.get('username') || 'unknown';
+console.log('[app.js] URL에서 username:', currentUsername);
+
+// userId가 설정되기 전까지 username 저장
+let pendingUsername = currentUsername && currentUsername !== 'unknown' ? currentUsername : null;
 
 ws.addEventListener('open', () => {
   setStatus('서버 연결됨');
-  console.log('WebSocket 연결됨, username:', currentUsername);
-  // WebSocket 연결 시 username 등록
-  if (currentUsername && currentUsername !== 'unknown') {
-    console.log('Username 등록 전송:', currentUsername);
-    wsSend({ type: 'registerUsername', username: currentUsername });
-  }
+  console.log('[app.js] WebSocket 연결됨');
+  console.log('[app.js] 현재 URL:', location.href);
+  console.log('[app.js] currentUsername:', currentUsername);
+  console.log('[app.js] pendingUsername:', pendingUsername);
+  // userId가 설정되면 바로 등록 (hello 메시지 후에 처리)
 });
 ws.addEventListener('message', async (ev) => {
   const msg = JSON.parse(ev.data);
   switch (msg.type) {
     case 'hello':
       userId = msg.userId;
+      console.log('[app.js] hello 메시지 수신, userId:', userId);
+      // userId가 설정된 후 username 등록 (반드시 실행)
+      if (pendingUsername && pendingUsername !== 'unknown') {
+        console.log('[app.js] Username 등록 전송 (userId: ' + userId + '):', pendingUsername);
+        currentUsername = pendingUsername;
+        wsSend({ type: 'registerUsername', username: pendingUsername });
+        pendingUsername = null;
+      } else if (currentUsername && currentUsername !== 'unknown') {
+        console.log('[app.js] Username 등록 전송 (userId: ' + userId + '):', currentUsername);
+        wsSend({ type: 'registerUsername', username: currentUsername });
+      } else {
+        console.error('[app.js] Username 등록 실패: currentUsername=' + currentUsername + ', pendingUsername=' + pendingUsername);
+      }
       break;
     case 'enqueued':
       if (typeof msg.queueSize === 'number') {

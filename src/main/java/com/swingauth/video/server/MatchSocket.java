@@ -48,7 +48,12 @@ public class MatchSocket implements WebSocketListener {
                 
                 if ("registerUsername".equals(type)) {
                     this.username = json.optString("username", null);
-                    manager.registerUsername(userId, username);
+                    if (this.username != null && !this.username.isEmpty() && !"unknown".equals(this.username)) {
+                        manager.registerUsername(userId, username);
+                        System.out.println("[MatchSocket] Username 등록됨: userId=" + userId + ", username=" + this.username);
+                    } else {
+                        System.err.println("[MatchSocket] Username 등록 실패: userId=" + userId + ", username=" + this.username);
+                    }
                 } else if ("joinQueue".equals(type)) {
                     manager.enqueue(this);
                 } else if ("leaveQueue".equals(type)) {

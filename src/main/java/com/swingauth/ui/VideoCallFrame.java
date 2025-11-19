@@ -24,7 +24,24 @@ public class VideoCallFrame extends JFrame {
         
         // 서버가 실행 중이 아니면 시작
         try {
-            System.out.println("[VideoCallFrame] 서버 인스턴스 가져옴");
+            final User finalUser = user; // final로 선언
+            
+            // 디버깅: user 객체 상태 확인
+            System.out.println("========================================");
+            System.out.println("[VideoCallFrame] 영상통화 시작");
+            System.out.println("[VideoCallFrame] user 객체: " + (user != null ? "존재" : "null"));
+            if (user != null) {
+                System.out.println("[VideoCallFrame] user.username: " + user.username);
+                System.out.println("[VideoCallFrame] user.username null 여부: " + (user.username == null));
+                System.out.println("[VideoCallFrame] user.username empty 여부: " + (user.username != null && user.username.isEmpty()));
+            }
+            
+            final String actualUsername = (finalUser != null && finalUser.username != null && !finalUser.username.isEmpty())
+                ? finalUser.username
+                : "unknown";
+            
+            System.out.println("[VideoCallFrame] 최종 사용자 ID: " + actualUsername);
+            System.out.println("========================================");
             
             // 먼저 파일에서 저장된 포트 확인
             int savedPort = readPortFromFile();
@@ -50,13 +67,13 @@ public class VideoCallFrame extends JFrame {
             }
             
             final int port = currentPort; // final로 선언하여 람다에서 사용 가능하게 함
-            final User finalUser = user; // final로 선언
-            final String actualUsername = (finalUser != null && finalUser.username != null && !finalUser.username.isEmpty())
-                ? finalUser.username
-                : "unknown";
             
-            // 콘솔에는 실제 username 표시 (예: 123 -> 1234 형태)
-            System.out.println("[VideoCallFrame] " + actualUsername + " -> http://localhost:" + port + "/video-call.html?username=unknown");
+            // 콘솔에는 실제 username과 URL 표시
+            System.out.println("========================================");
+            System.out.println("[VideoCallFrame] 브라우저 열기");
+            System.out.println("사용자 ID: " + actualUsername);
+            System.out.println("URL: http://localhost:" + port + "/video-call.html?username=" + actualUsername);
+            System.out.println("========================================");
             
             // 서버가 열린 포트로 접속 (localhost 사용)
             // 서버는 0.0.0.0으로 바인딩되어 있어 localhost로 접속 가능
@@ -69,15 +86,11 @@ public class VideoCallFrame extends JFrame {
                 StringBuilder urlBuilder = new StringBuilder();
                 urlBuilder.append("http://").append(hostAddress).append(":").append(port).append("/video-call.html");
                 
-                // URL에는 항상 "unknown"을 표시 (주소창에는 unknown으로 보임)
-                urlBuilder.append("?username=unknown");
-                
-                // 실제 username은 URL fragment로 전달 (주소창에는 보이지 않음)
-                if (!"unknown".equals(actualUsername)) {
-                    urlBuilder.append("#").append(java.net.URLEncoder.encode(actualUsername, "UTF-8"));
-                }
+                // 실제 username을 URL 파라미터로 전달
+                urlBuilder.append("?username=").append(java.net.URLEncoder.encode(actualUsername, "UTF-8"));
                 
                 String url = urlBuilder.toString();
+                System.out.println("[VideoCallFrame] 실제 생성된 URL: " + url);
                 URI uri = new URI(url);
                 Desktop.getDesktop().browse(uri);
             } catch (Exception ex) {
