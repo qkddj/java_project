@@ -1,10 +1,13 @@
 const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsScheme}://${location.host}/ws`);
+const isSecureContext = window.isSecureContext || (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 let userId, peerId, roomId, pc, localStream;
 let stayMatching = false;
 let remoteReadyWatchdog = null;
 let pendingRemoteCandidates = [];
 let micSender = null, camSender = null;
+let partnerUsername = null; // 상대방 username 저장
+let currentUsername = null; // 현재 유저의 username
 
 // 같은 브라우저의 다른 창/탭과 통신하기 위한 BroadcastChannel
 const broadcastChannel = typeof BroadcastChannel !== 'undefined' 
@@ -80,7 +83,19 @@ function showHangupButton(show) {
   }
 }
 
-ws.addEventListener('open', () => setStatus('서버 연결됨'));
+// URL에서 username 가져오기
+const urlParams = new URLSearchParams(location.search);
+currentUsername = urlParams.get('username') || 'unknown';
+
+ws.addEventListener('open', () => {
+  setStatus('서버 연결됨');
+  console.log('WebSocket 연결됨, username:', currentUsername);
+  // WebSocket 연결 시 username 등록
+  if (currentUsername && currentUsername !== 'unknown') {
+    console.log('Username 등록 전송:', currentUsername);
+    wsSend({ type: 'registerUsername', username: currentUsername });
+  }
+});
 ws.addEventListener('message', async (ev) => {
   const msg = JSON.parse(ev.data);
   switch (msg.type) {
@@ -89,17 +104,25 @@ ws.addEventListener('message', async (ev) => {
       break;
     case 'enqueued':
       if (typeof msg.queueSize === 'number') {
-        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        if (msg.queueSize === 0) {
+          setStatus('대기중');
+        } else {
+          setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        }
       } else {
-        setStatus(`대기중 (앞선 ${Math.max(0, (msg.position || 1) - 1)}명)`);
+        setStatus('대기중');
       }
       showHangupButton(true);
       break;
     case 'queueUpdate':
       if (typeof msg.queueSize === 'number') {
-        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        if (msg.queueSize === 0) {
+          setStatus('대기중');
+        } else {
+          setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        }
       } else {
-        setStatus(`대기중 (앞선 ${msg.ahead || 0}명)`);
+        setStatus('대기중');
       }
       showHangupButton(true);
       break;
@@ -110,6 +133,8 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       peerId = msg.peerId;
+      partnerUsername = msg.partnerUsername || null; // 상대방 username 저장 (평점용, UI에는 표시 안함)
+      console.log('매칭 완료! roomId:', roomId);
       setStatus(`매칭됨 (room ${roomId.substring(0, 8)})`);
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
@@ -165,14 +190,55 @@ ws.addEventListener('message', async (ev) => {
       }
       break;
     case 'callEnded':
-      teardown('상대 종료', stayMatching);
+      // 즉시 원격 비디오 정리
+      const rv = $('remoteVideo');
+      if (rv && rv.srcObject) {
+        const remoteStream = rv.srcObject;
+        remoteStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+        rv.srcObject = null;
+        rv.pause();
+      }
+      
+      // 평점 입력 (통화가 있었던 경우)
+      if (partnerUsername && roomId) {
+        showRatingDialog();
+      }
+      
+      // 상대방이 종료하면 매칭 종료하고 매칭 시작 버튼 복원
+      // 로컬 스트림은 유지 (keepLocal = true)
+      teardown('상대 종료', false);
       showRemoteWaiting(true);
-      if (stayMatching) {
-        setStatus('다음 상대 대기중');
-        wsSend({ type: 'joinQueue' });
-        showHangupButton(true);
-      } else {
-        showHangupButton(false);
+      
+      // 매칭 종료
+      stayMatching = false;
+      wsSend({ type: 'leaveQueue' });
+      
+      // 매칭 시작 버튼 복원
+      const btnStartAfterCall = $('btnStart');
+      if (btnStartAfterCall) {
+        btnStartAfterCall.disabled = false;
+        btnStartAfterCall.textContent = '매칭 시작';
+      }
+      
+      showHangupButton(false);
+      setStatus('Idle');
+      
+      // 다음 매칭을 위해 partnerUsername 초기화
+      partnerUsername = null;
+      break;
+    case 'ratingSubmitted':
+      // 평가 저장 완료 메시지 표시
+      if (msg.status === 'success') {
+        setStatus('평가 저장 완료 ✓');
+        // 3초 후 상태 초기화
+        setTimeout(() => {
+          if (statusEl.textContent === '평가 저장 완료 ✓') {
+            setStatus('Idle');
+          }
+        }, 3000);
       }
       break;
   }
@@ -181,24 +247,83 @@ ws.addEventListener('message', async (ev) => {
 function wsSend(o) { ws.readyState === 1 && ws.send(JSON.stringify(o)); }
 
 async function getMedia() {
+  // 기존 스트림이 있고 live 상태인지 확인
   if (localStream) {
     const hasLive = localStream.getTracks().some(t => t.readyState === 'live');
     if (hasLive) return localStream;
+    // 스트림이 있지만 live가 아니면 정리
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
   }
+  
+  // mediaDevices 지원 확인
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    const hint = !isSecureContext && location.hostname !== 'localhost'
-      ? 'HTTPS가 아닌 주소입니다. https 주소(예: ngrok URL)로 접속해야 합니다.'
-      : '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
+    let hint = '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
+    if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      hint = 'HTTPS가 필요합니다!\n\n' +
+             '다른 디바이스에서 카메라/마이크를 사용하려면 HTTPS가 필요합니다.\n\n' +
+             '해결 방법:\n' +
+             '1. ngrok 사용 (권장):\n' +
+             '   - ngrok 설치: https://ngrok.com/\n' +
+             '   - 터미널에서: ngrok http 8080\n' +
+             '   - 표시된 https://xxx.ngrok.io URL 사용\n\n' +
+             '2. 또는 서버 컴퓨터에서 localhost로 접속 (카메라 사용 가능)';
+    }
     throw new Error('mediaDevices_unavailable: ' + hint);
   }
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  $('localVideo').srcObject = localStream;
-  micSender = null;
-  camSender = null;
-  attachLocalTrackAlerts(localStream);
-  return localStream;
+  
+  try {
+    // 명시적으로 권한 요청 (video와 audio 모두)
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'user'
+      }, 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+    
+    // 비디오 요소에 스트림 연결
+    const lv = $('localVideo');
+    if (lv) {
+      lv.srcObject = localStream;
+      // 재생 시도
+      try {
+        await lv.play();
+      } catch (playErr) {
+        console.warn('로컬 비디오 재생 실패:', playErr);
+      }
+    }
+    
+    micSender = null;
+    camSender = null;
+    attachLocalTrackAlerts(localStream);
+    return localStream;
+  } catch (error) {
+    // 에러 발생 시 스트림 정리
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    
+    // 사용자 친화적인 에러 메시지
+    let errorMessage = '카메라/마이크 권한을 허용해주세요.';
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      errorMessage = '카메라/마이크 권한이 거부되었습니다.\n\n브라우저 주소창의 자물쇠 아이콘을 클릭하여 권한을 허용해주세요.';
+    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      errorMessage = '카메라나 마이크를 찾을 수 없습니다.\n\n장치가 연결되어 있는지 확인해주세요.';
+    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      errorMessage = '카메라나 마이크에 접근할 수 없습니다.\n\n다른 프로그램에서 사용 중일 수 있습니다.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    throw new Error(errorMessage);
+  }
 }
 
 async function ensurePc() {
@@ -274,20 +399,51 @@ async function startWebRTC(isCaller) {
 
 function teardown(reason, keepLocal) {
   setStatus(`종료: ${reason}`);
-  if (pc) { pc.getSenders().forEach(s => s.track && s.track.stop()); pc.close(); pc = null; }
+  
+  // 원격 비디오 스트림 정리
+  const rv = $('remoteVideo');
+  if (rv && rv.srcObject) {
+    const remoteStream = rv.srcObject;
+    remoteStream.getTracks().forEach(track => {
+      track.stop();
+      track.enabled = false;
+    });
+    rv.srcObject = null;
+    rv.pause();
+  }
+  
+  // PeerConnection 정리
+  if (pc) {
+    // 모든 트랙 중지
+    pc.getSenders().forEach(sender => {
+      if (sender.track) {
+        sender.track.stop();
+      }
+    });
+    // 원격 트랙도 정리
+    pc.getReceivers().forEach(receiver => {
+      if (receiver.track) {
+        receiver.track.stop();
+      }
+    });
+    pc.close();
+    pc = null;
+  }
+  
   roomId = null;
   if (!keepLocal) {
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
     }
+    const lv = $('localVideo');
+    if (lv) {
+      lv.srcObject = null;
+      lv.pause();
+    }
   }
   micSender = null;
   camSender = null;
-  const lv = $('localVideo');
-  const rv = $('remoteVideo');
-  if (!keepLocal) { if (lv) lv.srcObject = null; }
-  if (rv) rv.srcObject = null;
   showRemoteWaiting(true);
 }
 
@@ -309,20 +465,51 @@ function setupButtons() {
 
   if (btnStart) {
     btnStart.onclick = async () => {
+      // 버튼 비활성화하여 중복 클릭 방지
+      btnStart.disabled = true;
+      btnStart.textContent = '권한 요청 중...';
+      
       try {
+        // 권한 요청 (명시적으로 호출)
         await getMedia();
+        
+        // 로컬 비디오 재생 확인
         const lv = $('localVideo');
-        if (lv) { try { await lv.play(); } catch (_) { } }
+        if (lv && lv.srcObject) {
+          try {
+            await lv.play();
+            console.log('로컬 비디오 재생 성공');
+          } catch (playErr) {
+            console.warn('로컬 비디오 재생 실패:', playErr);
+          }
+        }
+        
+        // HTTPS 확인 (localhost 제외)
+        if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+          alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다.\n\nHTTPS 주소로 접속해 주세요.');
+          btnStart.disabled = false;
+          btnStart.textContent = '매칭 시작';
+          return;
+        }
+        
+        // 매칭 시작
+        stayMatching = true;
+        console.log('joinQueue 전송');
+        wsSend({ type: 'joinQueue' });
+        
+        // 버튼 텍스트 변경
+        btnStart.textContent = '매칭 중...';
       } catch (e) {
-        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n사유: ${e && e.name ? e.name : 'Unknown'} ${e && e.message ? e.message : ''}`);
-        return;
+        // 에러 메시지 표시
+        const errorMsg = e && e.message ? e.message : 
+                        (e && e.name ? `${e.name}: 권한을 허용해주세요.` : '알 수 없는 오류가 발생했습니다.');
+        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n\n${errorMsg}`);
+        
+        // 버튼 복원
+        btnStart.disabled = false;
+        btnStart.textContent = '매칭 시작';
+        console.error('getMedia 오류:', e);
       }
-      if (!isSecureContext && location.hostname !== 'localhost') {
-        alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다. HTTPS 주소로 접속해 주세요.');
-        return;
-      }
-      stayMatching = true;
-      wsSend({ type: 'joinQueue' });
     };
   }
 
@@ -337,12 +524,39 @@ function setupButtons() {
   if (btnHangup) {
     btnHangup.onclick = () => { 
       stayMatching = false;
+      
+      // 즉시 원격 비디오 정리
+      const rv = $('remoteVideo');
+      if (rv && rv.srcObject) {
+        const remoteStream = rv.srcObject;
+        remoteStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+        rv.srcObject = null;
+        rv.pause();
+      }
+      
       if (roomId) {
         wsSend({ type: 'endCall', roomId }); 
       }
+      
+      // 평점 입력
+      if (partnerUsername && roomId) {
+        showRatingDialog();
+      }
+      
       wsSend({ type: 'leaveQueue' });
       teardown('수동 종료', false);
       showHangupButton(false);
+      
+      // 매칭 시작 버튼 복원
+      if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.textContent = '매칭 시작';
+      }
+      
+      setStatus('Idle');
     };
   }
 
@@ -364,10 +578,79 @@ function setupButtons() {
     };
   }
 
+function showRatingDialog() {
+  const dialog = document.getElementById('ratingDialog');
+  const ratingButtons = dialog.querySelectorAll('.rating-btn');
+  const submitBtn = document.getElementById('ratingSubmitBtn');
+  const skipBtn = document.getElementById('ratingSkipBtn');
+  let selectedRating = null;
+  
+  // 다이얼로그 표시
+  dialog.classList.remove('hidden');
+  
+  // 평점 버튼 클릭 이벤트
+  ratingButtons.forEach(btn => {
+    btn.classList.remove('selected');
+    btn.onclick = () => {
+      // 기존 선택 해제
+      ratingButtons.forEach(b => b.classList.remove('selected'));
+      // 새 선택
+      btn.classList.add('selected');
+      selectedRating = parseInt(btn.dataset.rating);
+      submitBtn.disabled = false;
+    };
+  });
+  
+  // 제출 버튼
+  submitBtn.disabled = true;
+  submitBtn.onclick = () => {
+    if (selectedRating && selectedRating >= 1 && selectedRating <= 5) {
+      submitRating(selectedRating);
+      dialog.classList.add('hidden');
+    }
+  };
+  
+  // 건너뛰기 버튼
+  skipBtn.onclick = () => {
+    dialog.classList.add('hidden');
+    console.log('평가 건너뛰기');
+  };
+}
+
+function submitRating(rating) {
+  if (partnerUsername && ws && ws.readyState === WebSocket.OPEN) {
+    wsSend({
+      type: 'submitRating',
+      partnerUsername: partnerUsername,
+      rating: rating,
+      serviceType: 'video'
+    });
+    console.log('평점 전송: ' + rating + '점');
+  }
+}
+
+
 function closeWindowAndCleanup() {
+  // 즉시 원격 비디오 정리
+  const rv = $('remoteVideo');
+  if (rv && rv.srcObject) {
+    const remoteStream = rv.srcObject;
+    remoteStream.getTracks().forEach(track => {
+      track.stop();
+      track.enabled = false;
+    });
+    rv.srcObject = null;
+    rv.pause();
+  }
+  
   // 통화 중이면 통화 종료
   if (roomId) {
     wsSend({ type: 'endCall', roomId });
+  }
+  
+  // 평점 입력 (통화가 있었던 경우)
+  if (partnerUsername && roomId) {
+    showRatingDialog();
   }
   
   // 매칭 중이면 대기열에서 제거
