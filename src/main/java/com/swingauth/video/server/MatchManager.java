@@ -78,6 +78,11 @@ public class MatchManager {
         }
         waitingQueue.removeAll(toRemove);
         
+        int queueSize = waitingQueue.size();
+        if (queueSize >= 2) {
+            System.out.println("매칭 시도: 대기열 크기=" + queueSize);
+        }
+        
         // 대기열에 2명 이상이 있으면 매칭 시도
         while (waitingQueue.size() >= 2) {
             MatchSocket user1 = waitingQueue.poll();

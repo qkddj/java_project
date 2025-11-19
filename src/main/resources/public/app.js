@@ -103,17 +103,25 @@ ws.addEventListener('message', async (ev) => {
       break;
     case 'enqueued':
       if (typeof msg.queueSize === 'number') {
-        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        if (msg.queueSize === 0) {
+          setStatus('대기중');
+        } else {
+          setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        }
       } else {
-        setStatus(`대기중 (앞선 ${Math.max(0, (msg.position || 1) - 1)}명)`);
+        setStatus('대기중');
       }
       showHangupButton(true);
       break;
     case 'queueUpdate':
       if (typeof msg.queueSize === 'number') {
-        setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        if (msg.queueSize === 0) {
+          setStatus('대기중');
+        } else {
+          setStatus(`대기중 (${msg.queueSize}명 대기)`);
+        }
       } else {
-        setStatus(`대기중 (앞선 ${msg.ahead || 0}명)`);
+        setStatus('대기중');
       }
       showHangupButton(true);
       break;
@@ -181,20 +189,41 @@ ws.addEventListener('message', async (ev) => {
       }
       break;
     case 'callEnded':
+      // 즉시 원격 비디오 정리
+      const rv = $('remoteVideo');
+      if (rv && rv.srcObject) {
+        const remoteStream = rv.srcObject;
+        remoteStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+        rv.srcObject = null;
+        rv.pause();
+      }
+      
       // 평점 입력 (통화가 있었던 경우)
       if (partnerUsername && roomId) {
         showRatingDialog();
       }
       
-      teardown('상대 종료', stayMatching);
+      // 상대방이 종료하면 자동으로 대기 상태로 복귀
+      // 로컬 스트림은 유지 (keepLocal = true)
+      teardown('상대 종료', true);
       showRemoteWaiting(true);
-      if (stayMatching) {
-        setStatus('다음 상대 대기중');
-        wsSend({ type: 'joinQueue' });
-        showHangupButton(true);
-      } else {
-        showHangupButton(false);
+      
+      // 로컬 비디오가 계속 재생되도록 확인
+      const lv = $('localVideo');
+      if (lv && localStream) {
+        lv.srcObject = localStream;
+        lv.play().catch(() => {});
       }
+      
+      // 자동으로 대기 상태로 복귀
+      stayMatching = true;
+      setStatus('다음 상대 대기중');
+      wsSend({ type: 'joinQueue' });
+      showHangupButton(true);
+      
       // 다음 매칭을 위해 partnerUsername 초기화
       partnerUsername = null;
       break;
@@ -305,20 +334,51 @@ async function startWebRTC(isCaller) {
 
 function teardown(reason, keepLocal) {
   setStatus(`종료: ${reason}`);
-  if (pc) { pc.getSenders().forEach(s => s.track && s.track.stop()); pc.close(); pc = null; }
+  
+  // 원격 비디오 스트림 정리
+  const rv = $('remoteVideo');
+  if (rv && rv.srcObject) {
+    const remoteStream = rv.srcObject;
+    remoteStream.getTracks().forEach(track => {
+      track.stop();
+      track.enabled = false;
+    });
+    rv.srcObject = null;
+    rv.pause();
+  }
+  
+  // PeerConnection 정리
+  if (pc) {
+    // 모든 트랙 중지
+    pc.getSenders().forEach(sender => {
+      if (sender.track) {
+        sender.track.stop();
+      }
+    });
+    // 원격 트랙도 정리
+    pc.getReceivers().forEach(receiver => {
+      if (receiver.track) {
+        receiver.track.stop();
+      }
+    });
+    pc.close();
+    pc = null;
+  }
+  
   roomId = null;
   if (!keepLocal) {
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
     }
+    const lv = $('localVideo');
+    if (lv) {
+      lv.srcObject = null;
+      lv.pause();
+    }
   }
   micSender = null;
   camSender = null;
-  const lv = $('localVideo');
-  const rv = $('remoteVideo');
-  if (!keepLocal) { if (lv) lv.srcObject = null; }
-  if (rv) rv.srcObject = null;
   showRemoteWaiting(true);
 }
 
@@ -369,6 +429,19 @@ function setupButtons() {
   if (btnHangup) {
     btnHangup.onclick = () => { 
       stayMatching = false;
+      
+      // 즉시 원격 비디오 정리
+      const rv = $('remoteVideo');
+      if (rv && rv.srcObject) {
+        const remoteStream = rv.srcObject;
+        remoteStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+        rv.srcObject = null;
+        rv.pause();
+      }
+      
       if (roomId) {
         wsSend({ type: 'endCall', roomId }); 
       }
@@ -432,6 +505,18 @@ function submitRating(rating) {
 }
 
 function closeWindowAndCleanup() {
+  // 즉시 원격 비디오 정리
+  const rv = $('remoteVideo');
+  if (rv && rv.srcObject) {
+    const remoteStream = rv.srcObject;
+    remoteStream.getTracks().forEach(track => {
+      track.stop();
+      track.enabled = false;
+    });
+    rv.srcObject = null;
+    rv.pause();
+  }
+  
   // 통화 중이면 통화 종료
   if (roomId) {
     wsSend({ type: 'endCall', roomId });
