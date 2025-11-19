@@ -84,8 +84,11 @@ function showHangupButton(show) {
 }
 
 // URL에서 username 가져오기
+// 주소창에는 "unknown"으로 표시되지만, 실제 username은 URL fragment (#)에서 가져옴
 const urlParams = new URLSearchParams(location.search);
-currentUsername = urlParams.get('username') || 'unknown';
+const urlUsername = urlParams.get('username') || 'unknown';
+const hashUsername = location.hash ? decodeURIComponent(location.hash.substring(1)) : null;
+currentUsername = (hashUsername && hashUsername !== 'unknown') ? hashUsername : urlUsername;
 
 ws.addEventListener('open', () => {
   setStatus('서버 연결됨');
@@ -618,14 +621,17 @@ function showRatingDialog() {
 }
 
 function submitRating(rating) {
-  if (partnerUsername && ws && ws.readyState === WebSocket.OPEN) {
+  if (partnerUsername && currentUsername && ws && ws.readyState === WebSocket.OPEN) {
     wsSend({
       type: 'submitRating',
+      currentUsername: currentUsername,
       partnerUsername: partnerUsername,
       rating: rating,
       serviceType: 'video'
     });
-    console.log('평점 전송: ' + rating + '점');
+    console.log('평점 전송: ' + rating + '점 (평가자: ' + currentUsername + ', 피평가자: ' + partnerUsername + ')');
+  } else {
+    console.error('평점 전송 실패: partnerUsername=' + partnerUsername + ', currentUsername=' + currentUsername);
   }
 }
 

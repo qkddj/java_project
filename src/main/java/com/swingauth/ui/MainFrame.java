@@ -122,7 +122,7 @@ public class MainFrame extends JFrame {
     });
     btnVideo.addActionListener(e -> {
         SwingUtilities.invokeLater(() -> {
-            new VideoCallFrame(user);
+            new VideoCallFrame();
         });
     });
 

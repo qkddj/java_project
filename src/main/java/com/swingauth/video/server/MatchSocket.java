@@ -169,12 +169,19 @@ public class MatchSocket implements WebSocketListener {
      */
     private void handleSubmitRating(JSONObject json) {
         try {
-            String currentUsername = this.username;
+            // 메시지에서 currentUsername을 먼저 확인하고, 없으면 this.username 사용
+            String currentUsername = json.optString("currentUsername", null);
+            if (currentUsername == null || currentUsername.isEmpty() || "unknown".equals(currentUsername)) {
+                currentUsername = this.username;
+            }
+            
             String partnerUsername = json.optString("partnerUsername");
             int rating = json.optInt("rating");
             String serviceType = json.optString("serviceType", "video");
             
-            if (currentUsername == null || partnerUsername == null || rating < 1 || rating > 5) {
+            if (currentUsername == null || currentUsername.isEmpty() || "unknown".equals(currentUsername) 
+                    || partnerUsername == null || partnerUsername.isEmpty() || "unknown".equals(partnerUsername) 
+                    || rating < 1 || rating > 5) {
                 System.err.println("평점 데이터 유효성 검사 실패: currentUsername=" + currentUsername + 
                     ", partnerUsername=" + partnerUsername + ", rating=" + rating);
                 return;
