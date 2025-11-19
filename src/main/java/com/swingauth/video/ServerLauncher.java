@@ -5,6 +5,7 @@ import org.eclipse.jetty.server.*;
 import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 
 import java.net.*;
@@ -175,20 +176,32 @@ public class ServerLauncher {
         context.addServlet(new ServletHolder(new MatchWebSocketCreator()), "/ws");
         JettyWebSocketServletContainerInitializer.configure(context, null);
 
-        // 정적 파일 서빙
+        // 정적 파일 서빙 - 클래스패스 리소스 사용
         URL resourceBase = getClass().getClassLoader().getResource("public");
-        if (resourceBase != null) {
-            String resourcePath = resourceBase.toURI().toString();
-            context.setResourceBase(resourcePath);
-        } else {
+        if (resourceBase == null) {
             // 개발 환경에서 직접 경로 사용
             String publicPath = System.getProperty("user.dir") + "/src/main/resources/public";
-            context.setResourceBase(publicPath);
+            java.io.File publicDir = new java.io.File(publicPath);
+            if (!publicDir.exists() || !publicDir.isDirectory()) {
+                // Maven 빌드 경로 시도
+                publicPath = System.getProperty("user.dir") + "/target/classes/public";
+                publicDir = new java.io.File(publicPath);
+                if (!publicDir.exists() || !publicDir.isDirectory()) {
+                    throw new Exception("정적 파일 디렉토리를 찾을 수 없습니다. " + 
+                        "src/main/resources/public 또는 target/classes/public 경로를 확인하세요.");
+                }
+            }
+            resourceBase = publicDir.toURI().toURL();
         }
+        
+        // Resource 객체로 변환하여 설정
+        Resource resource = Resource.newResource(resourceBase);
+        context.setBaseResource(resource);
         
         // DefaultServlet 추가 (정적 파일 서빙)
         ServletHolder defaultServlet = new ServletHolder("default", DefaultServlet.class);
-        defaultServlet.setInitParameter("dirAllowed", "true");
+        defaultServlet.setInitParameter("dirAllowed", "false");
+        defaultServlet.setInitParameter("pathInfoOnly", "true");
         context.addServlet(defaultServlet, "/");
 
         server.setHandler(context);

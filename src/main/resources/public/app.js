@@ -132,8 +132,8 @@ ws.addEventListener('message', async (ev) => {
     case 'matched':
       roomId = msg.roomId;
       peerId = msg.peerId;
-      partnerUsername = msg.partnerUsername || null; // 상대방 username 저장
-      console.log('매칭 완료! roomId:', roomId, 'partnerUsername:', partnerUsername);
+      partnerUsername = msg.partnerUsername || null; // 상대방 username 저장 (평점용, UI에는 표시 안함)
+      console.log('매칭 완료! roomId:', roomId);
       setStatus(`매칭됨 (room ${roomId.substring(0, 8)})`);
       showRemoteWaiting(true);
       startRemoteReadyWatchdog();
@@ -477,7 +477,7 @@ function setupButtons() {
 
 function showRatingDialog() {
   const rating = prompt(
-    `상대방(${partnerUsername})에 대한 만족도를 평가해주세요.\n\n` +
+    `상대방에 대한 만족도를 평가해주세요.\n\n` +
     `1점: 매우 불만족\n` +
     `2점: 불만족\n` +
     `3점: 보통\n` +
@@ -500,7 +500,7 @@ function submitRating(rating) {
       rating: rating,
       serviceType: 'video'
     });
-    console.log('평점 전송: ' + partnerUsername + ' -> ' + rating + '점');
+    console.log('평점 전송: ' + rating + '점');
   }
 }
 
