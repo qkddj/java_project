@@ -181,7 +181,17 @@ public class MatchSocket implements WebSocketListener {
             }
             
             // MongoDB에 평점 저장
-            saveRatingToMongo(currentUsername, partnerUsername, rating, serviceType);
+            boolean success = saveRatingToMongo(currentUsername, partnerUsername, rating, serviceType);
+            
+            if (success) {
+                System.out.println("========================================");
+                System.out.println("평점 저장 성공!");
+                System.out.println("평가자: " + currentUsername);
+                System.out.println("피평가자: " + partnerUsername);
+                System.out.println("평점: " + rating + "점");
+                System.out.println("서비스 타입: " + serviceType);
+                System.out.println("========================================");
+            }
             
             sendMessage("{\"type\":\"ratingSubmitted\",\"status\":\"success\"}");
         } catch (Exception e) {
@@ -192,8 +202,9 @@ public class MatchSocket implements WebSocketListener {
 
     /**
      * MongoDB에 평점 저장
+     * @return 저장 성공 여부
      */
-    private void saveRatingToMongo(String currentUser, String partnerUser, int rating, String serviceType) {
+    private boolean saveRatingToMongo(String currentUser, String partnerUser, int rating, String serviceType) {
         try {
             // user1Id와 user2Id를 사전순으로 정렬
             String[] sorted = sortUserIds(currentUser, partnerUser);
@@ -220,15 +231,21 @@ public class MatchSocket implements WebSocketListener {
                 .append("createdAt", new Date()));
             
             Mongo.ratings().updateOne(filter, update, new UpdateOptions().upsert(true));
+            return true;
         } catch (com.mongodb.MongoWriteException e) {
             // 중복 키 에러는 무시 (이미 저장된 경우)
             if (e.getError().getCode() == 11000) {
-                // 무시
+                System.out.println("평점 저장: 중복 키 에러 (이미 저장된 평가)");
+                return true; // 이미 저장되어 있으므로 성공으로 간주
             } else {
-                throw e;
+                System.err.println("평점 저장 실패 (MongoWriteException): " + e.getMessage());
+                e.printStackTrace();
+                return false;
             }
         } catch (Exception e) {
-            // 다른 에러는 조용히 무시 (평점 저장 실패해도 앱은 계속 작동)
+            System.err.println("평점 저장 실패: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
     }
 

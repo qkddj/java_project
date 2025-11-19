@@ -207,26 +207,39 @@ ws.addEventListener('message', async (ev) => {
         showRatingDialog();
       }
       
-      // 상대방이 종료하면 자동으로 대기 상태로 복귀
+      // 상대방이 종료하면 매칭 종료하고 매칭 시작 버튼 복원
       // 로컬 스트림은 유지 (keepLocal = true)
-      teardown('상대 종료', true);
+      teardown('상대 종료', false);
       showRemoteWaiting(true);
       
-      // 로컬 비디오가 계속 재생되도록 확인
-      const lv = $('localVideo');
-      if (lv && localStream) {
-        lv.srcObject = localStream;
-        lv.play().catch(() => {});
+      // 매칭 종료
+      stayMatching = false;
+      wsSend({ type: 'leaveQueue' });
+      
+      // 매칭 시작 버튼 복원
+      const btnStartAfterCall = $('btnStart');
+      if (btnStartAfterCall) {
+        btnStartAfterCall.disabled = false;
+        btnStartAfterCall.textContent = '매칭 시작';
       }
       
-      // 자동으로 대기 상태로 복귀
-      stayMatching = true;
-      setStatus('다음 상대 대기중');
-      wsSend({ type: 'joinQueue' });
-      showHangupButton(true);
+      showHangupButton(false);
+      setStatus('Idle');
       
       // 다음 매칭을 위해 partnerUsername 초기화
       partnerUsername = null;
+      break;
+    case 'ratingSubmitted':
+      // 평가 저장 완료 메시지 표시
+      if (msg.status === 'success') {
+        setStatus('평가 저장 완료 ✓');
+        // 3초 후 상태 초기화
+        setTimeout(() => {
+          if (statusEl.textContent === '평가 저장 완료 ✓') {
+            setStatus('Idle');
+          }
+        }, 3000);
+      }
       break;
   }
 });
@@ -529,13 +542,21 @@ function setupButtons() {
       }
       
       // 평점 입력
-      if (partnerUsername) {
+      if (partnerUsername && roomId) {
         showRatingDialog();
       }
       
       wsSend({ type: 'leaveQueue' });
       teardown('수동 종료', false);
       showHangupButton(false);
+      
+      // 매칭 시작 버튼 복원
+      if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.textContent = '매칭 시작';
+      }
+      
+      setStatus('Idle');
     };
   }
 
@@ -607,6 +628,7 @@ function submitRating(rating) {
     console.log('평점 전송: ' + rating + '점');
   }
 }
+
 
 function closeWindowAndCleanup() {
   // 즉시 원격 비디오 정리
