@@ -14,7 +14,6 @@
         .row { display:flex; gap:8px; margin-top:12px; }
         button { }
         button.primary { }
-        .hidden { display:none; }
         #status { margin-left:8px; }
 
         .call-box { 
@@ -67,6 +66,93 @@
             object-fit:cover; 
             background:#000; 
         }
+        
+        /* 평가 다이얼로그 스타일 */
+        .rating-dialog-overlay {
+            position:fixed;
+            top:0;
+            left:0;
+            right:0;
+            bottom:0;
+            background:rgba(0,0,0,0.7);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            z-index:1000;
+        }
+        .rating-dialog {
+            background:#fff;
+            padding:24px;
+            border-radius:8px;
+            max-width:400px;
+            width:90%;
+            box-shadow:0 4px 20px rgba(0,0,0,0.3);
+        }
+        .rating-dialog h3 {
+            margin:0 0 16px 0;
+            font-size:18px;
+        }
+        .rating-dialog p {
+            margin:0 0 20px 0;
+            color:#666;
+            font-size:14px;
+            line-height:1.5;
+        }
+        .rating-buttons {
+            display:flex;
+            gap:8px;
+            flex-wrap:wrap;
+            margin-bottom:20px;
+        }
+        .rating-btn {
+            flex:1;
+            min-width:60px;
+            padding:12px;
+            border:2px solid #ddd;
+            background:#fff;
+            border-radius:4px;
+            cursor:pointer;
+            font-size:16px;
+            font-weight:bold;
+            transition:all 0.2s;
+        }
+        .rating-btn:hover {
+            background:#f5f5f5;
+            border-color:#999;
+        }
+        .rating-btn.selected {
+            background:#007bff;
+            color:#fff;
+            border-color:#007bff;
+        }
+        .rating-dialog-buttons {
+            display:flex;
+            gap:8px;
+            justify-content:flex-end;
+        }
+        .rating-dialog-btn {
+            padding:10px 20px;
+            border:none;
+            border-radius:4px;
+            cursor:pointer;
+            font-size:14px;
+            font-weight:bold;
+        }
+        .rating-dialog-btn.submit {
+            background:#007bff;
+            color:#fff;
+        }
+        .rating-dialog-btn.submit:hover {
+            background:#0056b3;
+        }
+        .rating-dialog-btn.skip {
+            background:#6c757d;
+            color:#fff;
+        }
+        .rating-dialog-btn.skip:hover {
+            background:#5a6268;
+        }
+        .hidden { display:none; }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
@@ -104,6 +190,26 @@
     </section>
     
 </main>
+
+<!-- 평가 다이얼로그 -->
+<div id="ratingDialog" class="rating-dialog-overlay hidden">
+    <div class="rating-dialog">
+        <h3>상대방 평가</h3>
+        <p>상대방에 대한 만족도를 평가해주세요.</p>
+        <div class="rating-buttons">
+            <button class="rating-btn" data-rating="1">1점<br><small>매우 불만족</small></button>
+            <button class="rating-btn" data-rating="2">2점<br><small>불만족</small></button>
+            <button class="rating-btn" data-rating="3">3점<br><small>보통</small></button>
+            <button class="rating-btn" data-rating="4">4점<br><small>만족</small></button>
+            <button class="rating-btn" data-rating="5">5점<br><small>매우 만족</small></button>
+        </div>
+        <div class="rating-dialog-buttons">
+            <button class="rating-dialog-btn skip" id="ratingSkipBtn">건너뛰기</button>
+            <button class="rating-dialog-btn submit" id="ratingSubmitBtn">제출</button>
+        </div>
+    </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

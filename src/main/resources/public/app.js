@@ -558,20 +558,42 @@ function setupButtons() {
   }
 
 function showRatingDialog() {
-  const rating = prompt(
-    `상대방에 대한 만족도를 평가해주세요.\n\n` +
-    `1점: 매우 불만족\n` +
-    `2점: 불만족\n` +
-    `3점: 보통\n` +
-    `4점: 만족\n` +
-    `5점: 매우 만족\n\n` +
-    `1~5점 중 선택:`,
-    "5"
-  );
+  const dialog = document.getElementById('ratingDialog');
+  const ratingButtons = dialog.querySelectorAll('.rating-btn');
+  const submitBtn = document.getElementById('ratingSubmitBtn');
+  const skipBtn = document.getElementById('ratingSkipBtn');
+  let selectedRating = null;
   
-  if (rating && rating >= 1 && rating <= 5) {
-    submitRating(parseInt(rating));
-  }
+  // 다이얼로그 표시
+  dialog.classList.remove('hidden');
+  
+  // 평점 버튼 클릭 이벤트
+  ratingButtons.forEach(btn => {
+    btn.classList.remove('selected');
+    btn.onclick = () => {
+      // 기존 선택 해제
+      ratingButtons.forEach(b => b.classList.remove('selected'));
+      // 새 선택
+      btn.classList.add('selected');
+      selectedRating = parseInt(btn.dataset.rating);
+      submitBtn.disabled = false;
+    };
+  });
+  
+  // 제출 버튼
+  submitBtn.disabled = true;
+  submitBtn.onclick = () => {
+    if (selectedRating && selectedRating >= 1 && selectedRating <= 5) {
+      submitRating(selectedRating);
+      dialog.classList.add('hidden');
+    }
+  };
+  
+  // 건너뛰기 버튼
+  skipBtn.onclick = () => {
+    dialog.classList.add('hidden');
+    console.log('평가 건너뛰기');
+  };
 }
 
 function submitRating(rating) {
