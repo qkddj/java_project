@@ -1,5 +1,6 @@
 const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${wsScheme}://${location.host}/ws`);
+const isSecureContext = window.isSecureContext || (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 let userId, peerId, roomId, pc, localStream;
 let stayMatching = false;
 let remoteReadyWatchdog = null;
@@ -233,12 +234,16 @@ ws.addEventListener('message', async (ev) => {
 function wsSend(o) { ws.readyState === 1 && ws.send(JSON.stringify(o)); }
 
 async function getMedia() {
+  // 기존 스트림이 있고 live 상태인지 확인
   if (localStream) {
     const hasLive = localStream.getTracks().some(t => t.readyState === 'live');
     if (hasLive) return localStream;
+    // 스트림이 있지만 live가 아니면 정리
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
   }
+  
+  // mediaDevices 지원 확인
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     let hint = '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
     if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -253,12 +258,59 @@ async function getMedia() {
     }
     throw new Error('mediaDevices_unavailable: ' + hint);
   }
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  $('localVideo').srcObject = localStream;
-  micSender = null;
-  camSender = null;
-  attachLocalTrackAlerts(localStream);
-  return localStream;
+  
+  try {
+    // 명시적으로 권한 요청 (video와 audio 모두)
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'user'
+      }, 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+    
+    // 비디오 요소에 스트림 연결
+    const lv = $('localVideo');
+    if (lv) {
+      lv.srcObject = localStream;
+      // 재생 시도
+      try {
+        await lv.play();
+      } catch (playErr) {
+        console.warn('로컬 비디오 재생 실패:', playErr);
+      }
+    }
+    
+    micSender = null;
+    camSender = null;
+    attachLocalTrackAlerts(localStream);
+    return localStream;
+  } catch (error) {
+    // 에러 발생 시 스트림 정리
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    
+    // 사용자 친화적인 에러 메시지
+    let errorMessage = '카메라/마이크 권한을 허용해주세요.';
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      errorMessage = '카메라/마이크 권한이 거부되었습니다.\n\n브라우저 주소창의 자물쇠 아이콘을 클릭하여 권한을 허용해주세요.';
+    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      errorMessage = '카메라나 마이크를 찾을 수 없습니다.\n\n장치가 연결되어 있는지 확인해주세요.';
+    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      errorMessage = '카메라나 마이크에 접근할 수 없습니다.\n\n다른 프로그램에서 사용 중일 수 있습니다.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    throw new Error(errorMessage);
+  }
 }
 
 async function ensurePc() {
@@ -400,21 +452,51 @@ function setupButtons() {
 
   if (btnStart) {
     btnStart.onclick = async () => {
+      // 버튼 비활성화하여 중복 클릭 방지
+      btnStart.disabled = true;
+      btnStart.textContent = '권한 요청 중...';
+      
       try {
+        // 권한 요청 (명시적으로 호출)
         await getMedia();
+        
+        // 로컬 비디오 재생 확인
         const lv = $('localVideo');
-        if (lv) { try { await lv.play(); } catch (_) { } }
+        if (lv && lv.srcObject) {
+          try {
+            await lv.play();
+            console.log('로컬 비디오 재생 성공');
+          } catch (playErr) {
+            console.warn('로컬 비디오 재생 실패:', playErr);
+          }
+        }
+        
+        // HTTPS 확인 (localhost 제외)
+        if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+          alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다.\n\nHTTPS 주소로 접속해 주세요.');
+          btnStart.disabled = false;
+          btnStart.textContent = '매칭 시작';
+          return;
+        }
+        
+        // 매칭 시작
+        stayMatching = true;
+        console.log('joinQueue 전송');
+        wsSend({ type: 'joinQueue' });
+        
+        // 버튼 텍스트 변경
+        btnStart.textContent = '매칭 중...';
       } catch (e) {
-        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n사유: ${e && e.name ? e.name : 'Unknown'} ${e && e.message ? e.message : ''}`);
-        return;
+        // 에러 메시지 표시
+        const errorMsg = e && e.message ? e.message : 
+                        (e && e.name ? `${e.name}: 권한을 허용해주세요.` : '알 수 없는 오류가 발생했습니다.');
+        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n\n${errorMsg}`);
+        
+        // 버튼 복원
+        btnStart.disabled = false;
+        btnStart.textContent = '매칭 시작';
+        console.error('getMedia 오류:', e);
       }
-      if (!isSecureContext && location.hostname !== 'localhost') {
-        alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다. HTTPS 주소로 접속해 주세요.');
-        return;
-      }
-      stayMatching = true;
-      console.log('joinQueue 전송');
-      wsSend({ type: 'joinQueue' });
     };
   }
 

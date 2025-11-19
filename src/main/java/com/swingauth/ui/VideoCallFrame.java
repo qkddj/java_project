@@ -38,12 +38,16 @@ public class VideoCallFrame extends JFrame {
         final int port = currentPort; // final로 선언하여 람다에서 사용 가능하게 함
         final User finalUser = user; // final로 선언
         
+        // 서버가 열린 포트로 접속 (localhost 사용)
+        // 서버는 0.0.0.0으로 바인딩되어 있어 localhost로 접속 가능
+        final String hostAddress = "localhost";
+        
         // 외부 브라우저로 열기 (더 나은 WebRTC 지원)
         SwingUtilities.invokeLater(() -> {
             try {
                 // URL을 명확하게 구성하여 이중 슬래시 방지
                 StringBuilder urlBuilder = new StringBuilder();
-                urlBuilder.append("http://localhost:").append(port).append("/video-call.html");
+                urlBuilder.append("http://").append(hostAddress).append(":").append(port).append("/video-call.html");
                 
                 // username을 URL 파라미터로 전달
                 if (finalUser != null && finalUser.username != null && !finalUser.username.isEmpty()) {
