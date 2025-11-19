@@ -133,13 +133,24 @@ public class ServerLauncher {
     }
 
     /**
-     * 포트가 사용 중인지 확인
+     * 사용 가능한 포트를 자동으로 찾아서 반환
+     * @return 사용 가능한 포트 번호
      */
-    private boolean isPortInUse(int port) {
-        try (java.net.ServerSocket serverSocket = new java.net.ServerSocket(port)) {
-            return false; // 포트가 사용 가능함
+    private int findAvailablePort() {
+        try (ServerSocket serverSocket = new ServerSocket(0)) {
+            // 포트 0을 사용하면 자동으로 사용 가능한 포트를 할당받음
+            return serverSocket.getLocalPort();
         } catch (Exception e) {
-            return true; // 포트가 사용 중임
+            // 실패 시 기본 포트 범위에서 찾기 시도
+            for (int port = 8080; port <= 9000; port++) {
+                try (ServerSocket testSocket = new ServerSocket(port)) {
+                    return port;
+                } catch (Exception ex) {
+                    // 포트가 사용 중이면 다음 포트 시도
+                    continue;
+                }
+            }
+            throw new RuntimeException("사용 가능한 포트를 찾을 수 없습니다.");
         }
     }
 
@@ -150,14 +161,9 @@ public class ServerLauncher {
             return;
         }
         
-        int targetPort = 8080;
-        
-        // 포트가 이미 사용 중이면 서버를 시작하지 않고 포트만 저장
-        if (isPortInUse(targetPort)) {
-            this.port = targetPort;
-            this.localIpAddress = findLocalIpAddress();
-            return;
-        }
+        // 사용 가능한 포트를 자동으로 찾기
+        int targetPort = findAvailablePort();
+        System.out.println("사용 가능한 포트 찾음: " + targetPort);
         
         server = new Server();
         ServerConnector connector = new ServerConnector(server);
