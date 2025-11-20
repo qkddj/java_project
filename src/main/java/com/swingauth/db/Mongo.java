@@ -40,6 +40,10 @@ public class Mongo {
     return getDb().getCollection("likes");
   }
 
+  public static MongoCollection<Document> ratings() {
+    return getDb().getCollection("ratings");
+  }
+
   /** 인덱스 만들 때 충돌(이미 존재 등)은 그냥 무시하는 헬퍼 */
   private static void safeCreateIndex(MongoCollection<Document> coll, Bson keys, IndexOptions options) {
     try {
@@ -82,5 +86,26 @@ public class Mongo {
         new IndexOptions().unique(true).name("uniq_post_user_like")
     );
     safeCreateIndex(likes(), Indexes.ascending("postId"));
+
+    // ratings: 평점 인덱스
+    // 기존에 있던 잘못된 인덱스 삭제 시도
+    try {
+      ratings().dropIndex("uniq_sessionId");
+    } catch (Exception ignored) {}
+    
+    // 평점 인덱스: 유저 쌍과 서비스 타입으로 유니크 제약
+    safeCreateIndex(
+        ratings(),
+        Indexes.ascending("user1Id", "user2Id", "serviceType"),
+        new IndexOptions().unique(true).name("uniq_user_pair_service")
+    );
+    safeCreateIndex(ratings(), Indexes.ascending("user1Id"), 
+        new IndexOptions().name("idx_user1Id"));
+    safeCreateIndex(ratings(), Indexes.ascending("user2Id"), 
+        new IndexOptions().name("idx_user2Id"));
+    safeCreateIndex(ratings(), Indexes.ascending("serviceType"), 
+        new IndexOptions().name("idx_serviceType"));
+    safeCreateIndex(ratings(), Indexes.descending("createdAt"), 
+        new IndexOptions().name("idx_createdAt_desc"));
   }
 }
