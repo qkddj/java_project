@@ -19,7 +19,8 @@ import java.util.regex.Pattern;
 public class PostService {
 
   private final MongoCollection<Document> posts = Mongo.posts();
-  private final MongoCollection<Document> likes = Mongo.likes(); // ★ 좋아요 컬렉션
+  private final MongoCollection<Document> likes = Mongo.likes();       // ★ 좋아요 기록
+  private final MongoCollection<Document> dislikes = Mongo.dislikes(); // ★ 싫어요 기록
 
   /** 게시판 + 지역 + 검색어 기반 목록 (페이징) */
   public List<Post> listByBoard(User user, String board, String keyword, int skip, int limit) {
@@ -105,35 +106,109 @@ public class PostService {
     return p;
   }
 
-  /** 좋아요 (한 유저당 한 번만 가능) */
+  /** 👍 좋아요 토글
+   *  - likes 컬렉션에 (postId, username) 기록/삭제
+   *  - posts.likesCount 증가/감소
+   *  - 글 작성자 users.likesReceived 증가/감소
+   *  @return 변경 후 좋아요 수
+   */
   public int toggleLike(User user, String postId) {
     ObjectId oid = new ObjectId(postId);
 
-    Document filter = new Document("postId", postId)
-            .append("username", user.username);
+    // 게시글 조회 (작성자 정보 얻기)
+    Document postDoc = posts.find(Filters.eq("_id", oid)).first();
+    if (postDoc == null) {
+      throw new IllegalArgumentException("게시글을 찾을 수 없습니다.");
+    }
+    String author = postDoc.getString("authorUsername");
 
-    Document found = Mongo.likes().find(filter).first();
+    Document filter = new Document("postId", postId)
+        .append("username", user.username);
+
+    Document found = likes.find(filter).first();
+
+    int delta; // +1 or -1
 
     if (found == null) {
-        // 좋아요 추가
-        Mongo.likes().insertOne(filter.append("createdAt", new Date()));
-
-        Mongo.posts().updateOne(
-            Filters.eq("_id", oid),
-            new Document("$inc", new Document("likesCount", 1))
-        );
+      // 좋아요 추가
+      likes.insertOne(new Document(filter).append("createdAt", new Date()));
+      delta = 1;
     } else {
-        // 좋아요 취소
-        Mongo.likes().deleteOne(filter);
-
-        Mongo.posts().updateOne(
-            Filters.eq("_id", oid),
-            new Document("$inc", new Document("likesCount", -1))
-        );
+      // 좋아요 취소
+      likes.deleteOne(filter);
+      delta = -1;
     }
 
-    Document post = Mongo.posts().find(Filters.eq("_id", oid)).first();
-    return post != null ? post.getInteger("likesCount", 0) : 0;
+    // 게시글 좋아요 수 변경
+    posts.updateOne(
+        Filters.eq("_id", oid),
+        new Document("$inc", new Document("likesCount", delta))
+    );
+
+    // 작성자 누적 좋아요 수 변경
+    if (author != null) {
+      Mongo.users().updateOne(
+          Filters.eq("username", author),
+          new Document("$inc", new Document("likesReceived", delta))
+      );
+    }
+
+    // 변경된 좋아요 수 반환
+    Document updated = posts.find(Filters.eq("_id", oid)).first();
+    int likesCount = 0;
+    if (updated != null) {
+      Object lcObj = updated.get("likesCount");
+      if (lcObj instanceof Number) {
+        likesCount = ((Number) lcObj).intValue();
+      }
+    }
+    return likesCount;
+  }
+
+  /** 👎 싫어요 토글
+   *  - dislikes 컬렉션에 (postId, username) 기록/삭제
+   *  - 글 작성자 users.dislikesReceived 증가/감소
+   *  - 화면에는 개수 표시 안 함
+   *  @return true  = 지금 상태가 "싫어요 눌림"
+   *          false = 지금 상태가 "싫어요 취소"
+   */
+  public boolean toggleDislike(User user, String postId) {
+    ObjectId oid = new ObjectId(postId);
+
+    Document postDoc = posts.find(Filters.eq("_id", oid)).first();
+    if (postDoc == null) {
+      throw new IllegalArgumentException("게시글을 찾을 수 없습니다.");
+    }
+    String author = postDoc.getString("authorUsername");
+
+    Document filter = new Document("postId", postId)
+        .append("username", user.username);
+
+    Document found = dislikes.find(filter).first();
+
+    int delta;
+    boolean nowDisliked;
+
+    if (found == null) {
+      // 새로 싫어요
+      dislikes.insertOne(new Document(filter).append("createdAt", new Date()));
+      delta = 1;
+      nowDisliked = true;
+    } else {
+      // 싫어요 취소
+      dislikes.deleteOne(filter);
+      delta = -1;
+      nowDisliked = false;
+    }
+
+    if (author != null) {
+      Mongo.users().updateOne(
+          Filters.eq("username", author),
+          new Document("$inc", new Document("dislikesReceived", delta))
+      );
+    }
+
+    return nowDisliked;
   }
 
   public Post getById(String id) {

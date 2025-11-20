@@ -40,6 +40,12 @@ public class Mongo {
     return getDb().getCollection("likes");
   }
 
+  // ★ 싫어요용 컬렉션
+  public static MongoCollection<Document> dislikes() {
+    return getDb().getCollection("dislikes");
+  }
+
+  // 기존에 쓰던 평점용 컬렉션 (그대로 유지)
   public static MongoCollection<Document> ratings() {
     return getDb().getCollection("ratings");
   }
@@ -87,25 +93,33 @@ public class Mongo {
     );
     safeCreateIndex(likes(), Indexes.ascending("postId"));
 
-    // ratings: 평점 인덱스
+    // ★ dislikes: (postId, username) 유니크 = 한 유저당 한 번만 싫어요
+    safeCreateIndex(
+        dislikes(),
+        Indexes.ascending("postId", "username"),
+        new IndexOptions().unique(true).name("uniq_post_user_dislike")
+    );
+    safeCreateIndex(dislikes(), Indexes.ascending("postId"));
+
+    // ratings: 평점 인덱스 (원래 있던 거 유지)
     // 기존에 있던 잘못된 인덱스 삭제 시도
     try {
       ratings().dropIndex("uniq_sessionId");
     } catch (Exception ignored) {}
-    
+
     // 평점 인덱스: 유저 쌍과 서비스 타입으로 유니크 제약
     safeCreateIndex(
         ratings(),
         Indexes.ascending("user1Id", "user2Id", "serviceType"),
         new IndexOptions().unique(true).name("uniq_user_pair_service")
     );
-    safeCreateIndex(ratings(), Indexes.ascending("user1Id"), 
+    safeCreateIndex(ratings(), Indexes.ascending("user1Id"),
         new IndexOptions().name("idx_user1Id"));
-    safeCreateIndex(ratings(), Indexes.ascending("user2Id"), 
+    safeCreateIndex(ratings(), Indexes.ascending("user2Id"),
         new IndexOptions().name("idx_user2Id"));
-    safeCreateIndex(ratings(), Indexes.ascending("serviceType"), 
+    safeCreateIndex(ratings(), Indexes.ascending("serviceType"),
         new IndexOptions().name("idx_serviceType"));
-    safeCreateIndex(ratings(), Indexes.descending("createdAt"), 
+    safeCreateIndex(ratings(), Indexes.descending("createdAt"),
         new IndexOptions().name("idx_createdAt_desc"));
   }
 }

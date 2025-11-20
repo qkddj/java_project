@@ -307,6 +307,7 @@ public class BoardFrame extends JFrame {
     boolean isOwner = p.authorUsername != null && p.authorUsername.equals(user.username);
 
     JButton btnLike = new JButton("좋아요");
+    JButton btnDislike = new JButton("싫어요");  // ★ 추가
     JButton btnEdit = new JButton("수정");
     JButton btnComment = new JButton("댓글 등록");
     JButton btnClose = new JButton("닫기");
@@ -346,12 +347,25 @@ public class BoardFrame extends JFrame {
         data.likesCount = newLikes;
         refreshCommentsAndInfo.run();
         resetAndLoad(); // 목록 카드 숫자 갱신
-      } catch (IllegalStateException ex) {
-        JOptionPane.showMessageDialog(dialog, ex.getMessage(),
-            "알림", JOptionPane.INFORMATION_MESSAGE);
       } catch (Exception ex) {
         JOptionPane.showMessageDialog(dialog,
-            "좋아요 실패: " + ex.getMessage(),
+            "좋아요 처리 실패: " + ex.getMessage(),
+            "오류", JOptionPane.ERROR_MESSAGE);
+      }
+    });
+
+    btnDislike.addActionListener(e -> {
+      try {
+        boolean nowDisliked = postService.toggleDislike(user, p.id);
+        String msg = nowDisliked
+            ? "이 게시글에 싫어요를 눌렀습니다."
+            : "이 게시글의 싫어요를 취소했습니다.";
+        JOptionPane.showMessageDialog(dialog, msg,
+            "알림", JOptionPane.INFORMATION_MESSAGE);
+        // 싫어요 수는 화면에 안 보이므로 별도 갱신은 필요 없음
+      } catch (Exception ex) {
+        JOptionPane.showMessageDialog(dialog,
+            "싫어요 처리 실패: " + ex.getMessage(),
             "오류", JOptionPane.ERROR_MESSAGE);
       }
     });
@@ -401,6 +415,7 @@ public class BoardFrame extends JFrame {
 
     JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
     bottomPanel.add(btnLike);
+    bottomPanel.add(btnDislike);  // ★ 추가
     bottomPanel.add(btnEdit);
     bottomPanel.add(btnComment);
     bottomPanel.add(btnClose);

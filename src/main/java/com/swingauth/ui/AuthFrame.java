@@ -10,14 +10,14 @@ public class AuthFrame extends JFrame {
   private final AuthService auth = new AuthService();
 
   public AuthFrame() {
-    setTitle("회원가입 / 로그인 (MongoDB + Swing)");
+    setTitle("로그인 / 회원가입 (MongoDB + Swing)");
     setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     setSize(480, 360);
     setLocationRelativeTo(null);
 
     JTabbedPane tabs = new JTabbedPane();
-    tabs.addTab("회원가입", buildSignUpPanel());
     tabs.addTab("로그인", buildLoginPanel());
+    tabs.addTab("회원가입", buildSignUpPanel());
 
     setContentPane(tabs);
   }
