@@ -24,6 +24,9 @@ public class User {
   public String city;        // 시/군/구
   public String neighborhood; // region + city 등 파생표시
 
+  // 평점 정보
+  public Double averageRating; // 평균 평점 (DB에 저장됨)
+
   public Document toDoc() {
     return new Document(Map.of(
         "username", username,
@@ -39,7 +42,8 @@ public class User {
     .append("country", country)
     .append("region", region)
     .append("city", city)
-    .append("neighborhood", neighborhood);
+    .append("neighborhood", neighborhood)
+    .append("averageRating", averageRating);
   }
 
   public static User fromDoc(Document d) {
@@ -71,6 +75,17 @@ public class User {
     u.region = d.getString("region");
     u.city = d.getString("city");
     u.neighborhood = d.getString("neighborhood");
+    
+    // averageRating: Double 또는 Number 타입 처리
+    Object ar = d.get("averageRating");
+    if (ar instanceof Double) {
+      u.averageRating = (Double) ar;
+    } else if (ar instanceof Number) {
+      u.averageRating = ((Number) ar).doubleValue();
+    } else {
+      u.averageRating = null;
+    }
+    
     return u;
   }
 }

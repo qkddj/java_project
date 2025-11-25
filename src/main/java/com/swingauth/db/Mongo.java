@@ -101,17 +101,35 @@ public class Mongo {
     );
     safeCreateIndex(dislikes(), Indexes.ascending("postId"));
 
-    // ratings: 평점 인덱스 (원래 있던 거 유지)
+    // ratings: 평점 인덱스
     // 기존에 있던 잘못된 인덱스 삭제 시도
     try {
       ratings().dropIndex("uniq_sessionId");
     } catch (Exception ignored) {}
 
+    // 기존 인덱스 삭제 시도 (새로운 구조로 재생성하기 위해)
+    try {
+      ratings().dropIndex("uniq_user_pair_service");
+      System.out.println("[Mongo] 기존 uniq_user_pair_service 인덱스 삭제 완료");
+    } catch (Exception ignored) {}
+    
+    try {
+      ratings().dropIndex("uniq_user_service_average");
+      System.out.println("[Mongo] 기존 uniq_user_service_average 인덱스 삭제 완료");
+    } catch (Exception ignored) {}
+
     // 평점 인덱스: 유저 쌍과 서비스 타입으로 유니크 제약
+    // user1Id, user2Id가 있는 문서에만 적용 (average 문서는 제외)
     safeCreateIndex(
         ratings(),
         Indexes.ascending("user1Id", "user2Id", "serviceType"),
-        new IndexOptions().unique(true).name("uniq_user_pair_service")
+        new IndexOptions().unique(true).sparse(true).name("uniq_user_pair_service")
+    );
+    // serviceType: "average" 문서용 인덱스 (userId만 사용, sparse로 null 제외)
+    safeCreateIndex(
+        ratings(),
+        Indexes.ascending("userId", "serviceType"),
+        new IndexOptions().unique(true).sparse(true).name("uniq_user_service_average")
     );
     safeCreateIndex(ratings(), Indexes.ascending("user1Id"),
         new IndexOptions().name("idx_user1Id"));
