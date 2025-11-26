@@ -10,6 +10,42 @@ import org.bson.types.ObjectId;
 public class RatingUtil {
     
     /**
+     * 특정 사용자의 평균 평점을 조회합니다.
+     * @param username 사용자명
+     * @return 평균 평점 (없으면 5.0)
+     */
+    public static double getUserAverageRating(String username) {
+        try {
+            var userDoc = Mongo.users().find(Filters.eq("username", username)).first();
+            if (userDoc == null) return 5.0;
+            
+            Object id = userDoc.get("_id");
+            if (!(id instanceof ObjectId)) return 5.0;
+            
+            ObjectId userId = (ObjectId) id;
+            
+            var avgDoc = Mongo.ratings().find(
+                Filters.and(
+                    Filters.eq("userId", userId),
+                    Filters.eq("serviceType", "average")
+                )
+            ).first();
+            
+            if (avgDoc == null) return 5.0;
+            
+            Object ar = avgDoc.get("averageRating");
+            if (ar instanceof Double) {
+                return (Double) ar;
+            } else if (ar instanceof Number) {
+                return ((Number) ar).doubleValue();
+            }
+            return 5.0;
+        } catch (Exception e) {
+            return 5.0;
+        }
+    }
+    
+    /**
      * 특정 사용자의 평균 평점을 초기화합니다 (삭제).
      * @param username 사용자명
      * @return 삭제된 문서 수
