@@ -19,8 +19,8 @@ import java.util.regex.Pattern;
 public class PostService {
 
   private final MongoCollection<Document> posts = Mongo.posts();
-  private final MongoCollection<Document> likes = Mongo.likes();       // ★ 좋아요 기록
-  private final MongoCollection<Document> dislikes = Mongo.dislikes(); // ★ 싫어요 기록
+  private final MongoCollection<Document> likes = Mongo.likes();       // 좋아요 기록
+  private final MongoCollection<Document> dislikes = Mongo.dislikes(); // 싫어요 기록
 
   /** 게시판 + 지역 + 검색어 기반 목록 (페이징) */
   public List<Post> listByBoard(User user, String board, String keyword, int skip, int limit) {

@@ -5,6 +5,7 @@ import com.swingauth.comment.CommentService;
 import com.swingauth.model.Post;
 import com.swingauth.model.User;
 import com.swingauth.service.PostService;
+import com.swingauth.service.ReportService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -20,6 +21,7 @@ public class BoardFrame extends JFrame {
 
   private final PostService postService = new PostService();
   private final CommentService commentService = new CommentService();
+  private final ReportService reportService = new ReportService();
 
   private JTextField searchField;
   private JPanel cardsPanel;
@@ -307,13 +309,21 @@ public class BoardFrame extends JFrame {
     boolean isOwner = p.authorUsername != null && p.authorUsername.equals(user.username);
 
     JButton btnLike = new JButton("좋아요");
-    JButton btnDislike = new JButton("싫어요");  // ★ 추가
+    JButton btnDislike = new JButton("싫어요");
     JButton btnEdit = new JButton("수정");
     JButton btnComment = new JButton("댓글 등록");
+    JButton btnReport = new JButton("신고");
     JButton btnClose = new JButton("닫기");
 
     if (!isOwner) {
       btnEdit.setEnabled(false);
+    }
+
+    // 이미 신고했는지 미리 체크해서 버튼 상태 변경
+    boolean alreadyReported = reportService.hasReported(user, p);
+    if (alreadyReported) {
+      btnReport.setEnabled(false);
+      btnReport.setText("신고 완료");
     }
 
     // info 라벨/댓글 영역 갱신용 헬퍼
@@ -362,7 +372,6 @@ public class BoardFrame extends JFrame {
             : "이 게시글의 싫어요를 취소했습니다.";
         JOptionPane.showMessageDialog(dialog, msg,
             "알림", JOptionPane.INFORMATION_MESSAGE);
-        // 싫어요 수는 화면에 안 보이므로 별도 갱신은 필요 없음
       } catch (Exception ex) {
         JOptionPane.showMessageDialog(dialog,
             "싫어요 처리 실패: " + ex.getMessage(),
@@ -411,13 +420,79 @@ public class BoardFrame extends JFrame {
       }.execute();
     });
 
+    // 신고 버튼
+    btnReport.addActionListener(e -> {
+      if (p.authorUsername != null && p.authorUsername.equals(user.username)) {
+        JOptionPane.showMessageDialog(dialog,
+            "본인이 작성한 글은 신고할 수 없습니다.",
+            "알림", JOptionPane.INFORMATION_MESSAGE);
+        return;
+      }
+
+      JTextArea taReason = new JTextArea(5, 30);
+      taReason.setLineWrap(true);
+      taReason.setWrapStyleWord(true);
+
+      JPanel panel = new JPanel(new BorderLayout(8, 8));
+      panel.add(new JLabel("신고 사유를 입력하세요:"), BorderLayout.NORTH);
+      panel.add(new JScrollPane(taReason), BorderLayout.CENTER);
+
+      int res = JOptionPane.showConfirmDialog(
+          dialog,
+          panel,
+          "게시글 신고",
+          JOptionPane.OK_CANCEL_OPTION,
+          JOptionPane.PLAIN_MESSAGE
+      );
+      if (res != JOptionPane.OK_OPTION) {
+        return;
+      }
+
+      String reason = taReason.getText();
+      if (reason == null || reason.trim().isEmpty()) {
+        JOptionPane.showMessageDialog(dialog,
+            "신고 사유를 입력하세요.",
+            "알림", JOptionPane.INFORMATION_MESSAGE);
+        return;
+      }
+
+      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+      new SwingWorker<Void, Void>() {
+        @Override
+        protected Void doInBackground() {
+          reportService.reportPost(user, p, reason.trim());
+          return null;
+        }
+
+        @Override
+        protected void done() {
+          setCursor(Cursor.getDefaultCursor());
+          try {
+            get(); // 예외 전파
+            JOptionPane.showMessageDialog(dialog,
+                "신고가 접수되었습니다.",
+                "알림", JOptionPane.INFORMATION_MESSAGE);
+            btnReport.setEnabled(false);
+            btnReport.setText("신고 완료");
+          } catch (Exception ex) {
+            Throwable cause = ex.getCause();
+            String msg = (cause != null ? cause.getMessage() : ex.getMessage());
+            JOptionPane.showMessageDialog(dialog,
+                "신고 처리 실패: " + msg,
+                "오류", JOptionPane.ERROR_MESSAGE);
+          }
+        }
+      }.execute();
+    });
+
     btnClose.addActionListener(e -> dialog.dispose());
 
     JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
     bottomPanel.add(btnLike);
-    bottomPanel.add(btnDislike);  // ★ 추가
+    bottomPanel.add(btnDislike);
     bottomPanel.add(btnEdit);
     bottomPanel.add(btnComment);
+    bottomPanel.add(btnReport);
     bottomPanel.add(btnClose);
     dialog.add(bottomPanel, BorderLayout.SOUTH);
 

@@ -45,6 +45,11 @@ public class Mongo {
     return getDb().getCollection("dislikes");
   }
 
+  // ★ 신고용 컬렉션
+  public static MongoCollection<Document> reports() {
+    return getDb().getCollection("reports");
+  }
+
   // 기존에 쓰던 평점용 컬렉션 (그대로 유지)
   public static MongoCollection<Document> ratings() {
     return getDb().getCollection("ratings");
@@ -100,6 +105,17 @@ public class Mongo {
         new IndexOptions().unique(true).name("uniq_post_user_dislike")
     );
     safeCreateIndex(dislikes(), Indexes.ascending("postId"));
+
+    // ★ reports: 신고 (postId, reporterUsername) 유니크 = 한 유저당 같은 글은 한 번만 신고
+    safeCreateIndex(
+        reports(),
+        Indexes.ascending("postId", "reporterUsername"),
+        new IndexOptions().unique(true).name("uniq_report_post_reporter")
+    );
+    // 신고 당한 사람 기준 조회용
+    safeCreateIndex(reports(), Indexes.ascending("reportedUsername"));
+    // 최신 신고 순 정렬용
+    safeCreateIndex(reports(), Indexes.descending("createdAt"));
 
     // ratings: 평점 인덱스 (원래 있던 거 유지)
     // 기존에 있던 잘못된 인덱스 삭제 시도
