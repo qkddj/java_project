@@ -3,6 +3,10 @@ package com.swingauth.chat.server;
 import com.corundumstudio.socketio.*;
 import com.corundumstudio.socketio.listener.ConnectListener;
 import com.corundumstudio.socketio.listener.DisconnectListener;
+import com.mongodb.client.model.Filters;
+import com.swingauth.db.Mongo;
+import com.swingauth.service.RatingService;
+import org.bson.Document;
 import org.json.JSONObject;
 
 import java.net.InetAddress;
@@ -17,6 +21,7 @@ public class ChatServer {
     private final Map<String, String> matchedPairs = new HashMap<>(); // clientId -> matchedClientId
     private final Map<String, SocketIOClient> clients = new HashMap<>();
     private final Map<String, String> clientIdToUsername = new HashMap<>(); // clientId -> username
+    private final RatingService ratingService = new RatingService();
     private int port = 3001;
     private boolean isRunning = false;
 
@@ -165,12 +170,29 @@ public class ChatServer {
             String user1Id = user1.getSessionId().toString();
             String user2Id = user2.getSessionId().toString();
 
-            matchedPairs.put(user1Id, user2Id);
-            matchedPairs.put(user2Id, user1Id);
-
             // username 가져오기
             String user1Username = clientIdToUsername.getOrDefault(user1Id, "unknown");
             String user2Username = clientIdToUsername.getOrDefault(user2Id, "unknown");
+
+            // 블랙리스트 체크: 두 사용자 간 평균 평점이 2점 이하이면 매칭 불가
+            if (!user1Username.equals("unknown") && !user2Username.equals("unknown")) {
+                if (ratingService.isBlacklisted(user1Username, user2Username)) {
+                    System.out.println("블랙리스트로 인해 매칭 차단: " + user1Username + " <-> " + user2Username);
+                    // 대기열에 다시 추가하여 다른 사용자와 매칭 시도
+                    matchQueue.offer(user1);
+                    matchQueue.offer(user2);
+                    continue;
+                }
+            }
+
+            matchedPairs.put(user1Id, user2Id);
+            matchedPairs.put(user2Id, user1Id);
+
+            // 채팅 횟수 증가
+            if (!user1Username.equals("unknown") && !user2Username.equals("unknown")) {
+                incrementChatCount(user1Username);
+                incrementChatCount(user2Username);
+            }
 
             // matched 이벤트에 partnerId (Socket ID)와 partnerUsername 전달
             JSONObject user1Data = new JSONObject();
@@ -221,6 +243,25 @@ public class ChatServer {
 
     public int getPort() {
         return port;
+    }
+    
+    /**
+     * 사용자의 채팅 횟수 증가
+     */
+    private void incrementChatCount(String username) {
+        if (username == null || username.isBlank() || username.equals("unknown")) {
+            return;
+        }
+        
+        try {
+            Mongo.users().updateOne(
+                Filters.eq("username", username),
+                new Document("$inc", new Document("chatCount", 1))
+            );
+            System.out.println("채팅 횟수 증가: username=" + username);
+        } catch (Exception e) {
+            System.err.println("채팅 횟수 증가 실패: username=" + username + ", 오류=" + e.getMessage());
+        }
     }
     
     /**

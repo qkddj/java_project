@@ -61,15 +61,20 @@ public class RatingDialog extends JDialog {
 
         add(centerPanel, BorderLayout.CENTER);
 
-        // 하단: 제출 버튼
-        JPanel bottomPanel = new JPanel(new FlowLayout());
+        // 하단: 제출 및 건너뛰기 버튼
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 20, 20));
+        
+        JButton skipButton = new JButton("건너뛰기");
+        skipButton.setPreferredSize(new Dimension(100, 35));
+        skipButton.addActionListener(e -> skipRating());
         
         submitButton = new JButton("제출");
         submitButton.setPreferredSize(new Dimension(100, 35));
         submitButton.setEnabled(false);
         submitButton.addActionListener(e -> submitRating());
         
+        bottomPanel.add(skipButton);
         bottomPanel.add(submitButton);
         add(bottomPanel, BorderLayout.SOUTH);
     }
@@ -102,10 +107,17 @@ public class RatingDialog extends JDialog {
             dispose();
         }
     }
+    
+    private void skipRating() {
+        // 건너뛰기를 선택하면 평점 없이 창 닫기
+        selectedRating = 0;
+        submitted = true;
+        dispose();
+    }
 
     /**
      * 평점 다이얼로그를 표시하고 선택된 평점을 반환
-     * @return 선택된 평점 (1-5), 취소 시 0
+     * @return 선택된 평점 (1-5), 건너뛰기/취소 시 0
      */
     public int showRatingDialog() {
         setVisible(true);

@@ -133,7 +133,81 @@ public class RatingService {
         
         // upsert를 사용하여 문서가 없으면 생성, 있으면 업데이트
         ratings.updateOne(filter, update, new UpdateOptions().upsert(true));
+        
+        // 받은 사용자의 평점 통계 업데이트
+        updateUserRatingStats(ratedUsername, rating);
+        
+        // 채팅 횟수는 매칭 완료 시 증가하므로 여기서는 처리하지 않음
+        
         return true;
+    }
+    
+    /**
+     * 사용자가 받은 평점 통계 업데이트
+     */
+    private void updateUserRatingStats(String username, int rating) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        
+        // 받은 평점 합계 및 횟수 증가
+        users.updateOne(
+            Filters.eq("username", username),
+            new Document("$inc", new Document()
+                .append("totalRatingReceived", rating)
+                .append("ratingCountReceived", 1)
+            )
+        );
+        
+        System.out.println("사용자 평점 통계 업데이트: username=" + username + ", 받은 평점=" + rating);
+    }
+    
+    /**
+     * 두 사용자 간 평균 평점이 2점 이하인지 확인 (블랙리스트 체크)
+     * @param username1 사용자1 username
+     * @param username2 사용자2 username
+     * @return true면 블랙리스트 (매칭 불가), false면 매칭 가능
+     */
+    public boolean isBlacklisted(String username1, String username2) {
+        if (username1 == null || username1.isBlank() || username2 == null || username2.isBlank()) {
+            return false;
+        }
+        
+        ObjectId user1Id = getUserIdByUsername(username1);
+        ObjectId user2Id = getUserIdByUsername(username2);
+        
+        if (user1Id == null || user2Id == null) {
+            return false;
+        }
+        
+        // ObjectId 정렬
+        ObjectId[] sorted = sortObjectIds(user1Id, user2Id);
+        ObjectId sortedUser1Id = sorted[0];
+        ObjectId sortedUser2Id = sorted[1];
+        
+        // 두 사용자 간 평점 문서 찾기
+        Document ratingDoc = ratings.find(
+            Filters.and(
+                Filters.eq("user1Id", sortedUser1Id),
+                Filters.eq("user2Id", sortedUser2Id),
+                Filters.eq("serviceType", "randomChat")
+            )
+        ).first();
+        
+        if (ratingDoc != null) {
+            Object avgRatingObj = ratingDoc.get("averageRating");
+            if (avgRatingObj instanceof Number) {
+                double averageRating = ((Number) avgRatingObj).doubleValue();
+                // 평균 평점이 2점 이하이면 블랙리스트
+                if (averageRating <= 2.0) {
+                    System.out.println("블랙리스트 체크: " + username1 + " <-> " + username2 + 
+                                     ", 평균 평점=" + averageRating + " (매칭 불가)");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 }
 

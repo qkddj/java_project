@@ -23,6 +23,11 @@ public class User {
   public String region;      // 시/도
   public String city;        // 시/군/구
   public String neighborhood; // region + city 등 파생표시
+  
+  // 평점 및 채팅 통계
+  public Integer totalRatingReceived = 0;  // 받은 평점 합계
+  public Integer ratingCountReceived = 0;  // 받은 평점 횟수
+  public Integer chatCount = 0;            // 채팅 횟수
 
   public Document toDoc() {
     return new Document(Map.of(
@@ -39,7 +44,10 @@ public class User {
     .append("country", country)
     .append("region", region)
     .append("city", city)
-    .append("neighborhood", neighborhood);
+    .append("neighborhood", neighborhood)
+    .append("totalRatingReceived", totalRatingReceived != null ? totalRatingReceived : 0)
+    .append("ratingCountReceived", ratingCountReceived != null ? ratingCountReceived : 0)
+    .append("chatCount", chatCount != null ? chatCount : 0);
   }
 
   public static User fromDoc(Document d) {
@@ -71,6 +79,20 @@ public class User {
     u.region = d.getString("region");
     u.city = d.getString("city");
     u.neighborhood = d.getString("neighborhood");
+    
+    // 평점 및 채팅 통계
+    Object trr = d.get("totalRatingReceived");
+    if (trr instanceof Number) u.totalRatingReceived = ((Number) trr).intValue();
+    else u.totalRatingReceived = 0;
+    
+    Object rcr = d.get("ratingCountReceived");
+    if (rcr instanceof Number) u.ratingCountReceived = ((Number) rcr).intValue();
+    else u.ratingCountReceived = 0;
+    
+    Object cc = d.get("chatCount");
+    if (cc instanceof Number) u.chatCount = ((Number) cc).intValue();
+    else u.chatCount = 0;
+    
     return u;
   }
 }
