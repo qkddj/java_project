@@ -1,6 +1,8 @@
 package com.swingauth.ui;
 
 import com.swingauth.config.ServerConfig;
+import com.swingauth.model.User;
+import com.swingauth.service.RatingService;
 import io.socket.client.IO;
 import io.socket.client.Socket;
 import org.json.JSONObject;
@@ -30,10 +32,24 @@ public class RandomChatFrame extends JFrame {
     private JLabel charCountLabel;
     private boolean isConnected = false;
     private static final int MAX_CHARS = 100;
+    private User currentUser;
+    private String partnerId; // 상대방 ID (Socket ID)
+    private String partnerUsername; // 상대방 username
+    private boolean ratingShown = false; // 평점 다이얼로그가 이미 표시되었는지 여부
+    private boolean chatStarted = false; // 채팅이 한 번이라도 시작되었는지 여부 (평점을 남길 수 있는지 확인용)
 
-    public RandomChatFrame(Socket existingSocket) {
+    public RandomChatFrame(Socket existingSocket, User user) {
+        this(existingSocket, user, null);
+    }
+    
+    public RandomChatFrame(Socket existingSocket, User user, String partnerUsername) {
         // 기존 소켓 사용
         this.socket = existingSocket;
+        this.currentUser = user;
+        this.partnerUsername = partnerUsername; // MatchingFrame에서 전달받은 partnerUsername
+        if (partnerUsername != null) {
+            System.out.println("RandomChatFrame 생성: partnerUsername=" + partnerUsername);
+        }
         setTitle("랜덤 채팅");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(600, 700);
@@ -184,11 +200,22 @@ public class RandomChatFrame extends JFrame {
         // Socket.io 연결 (기존 소켓이 있으면 재사용, 없으면 새로 연결)
         if (socket != null && socket.connected()) {
             setupSocketListeners();
+            // username 등록 (이미 연결된 소켓이어도 등록)
+            if (currentUser != null && currentUser.username != null && !currentUser.username.isBlank()) {
+                socket.emit("registerUsername", currentUser.username);
+                System.out.println("RandomChatFrame: Username 등록 전송: " + currentUser.username + " (Socket ID: " + socket.id() + ")");
+            }
             // 이미 매칭된 상태이므로 바로 활성화
             isConnected = true;
+            chatStarted = true; // 채팅이 시작되었음을 표시
             inputField.setEnabled(true);
             sendButton.setEnabled(true);
             addMessage("시스템", "매칭 완료! 대화를 시작하세요.", false);
+            // 이미 매칭된 상태이므로 partnerUsername은 나중에 matched 이벤트에서 받을 수 있음
+            // 하지만 이미 매칭된 경우 matched 이벤트가 다시 발생하지 않을 수 있으므로
+            // partnerUsername은 null로 초기화 (matched 이벤트에서 업데이트됨)
+            partnerUsername = null;
+            System.out.println("이미 매칭된 상태로 RandomChatFrame 생성됨. partnerUsername은 matched 이벤트에서 받을 예정");
         } else {
             connectSocket();
         }
@@ -224,16 +251,44 @@ public class RandomChatFrame extends JFrame {
                 isConnected = false;
                 inputField.setEnabled(false);
                 sendButton.setEnabled(false);
-                addMessage("시스템", "상대방이 연결을 종료했습니다.", false);
+                addMessage("시스템", "상대방이 연결을 종료했습니다. 원하시면 매칭 종료 버튼을 눌러 평점을 남겨주세요.", false);
+                // 상대방이 종료했다는 알림만 표시하고, 사용자가 직접 종료할 때 평점 다이얼로그 표시
+                // 창은 자동으로 닫지 않음 - 사용자가 직접 종료 버튼을 눌러야 함
             });
         });
 
         socket.on("matched", args -> {
             SwingUtilities.invokeLater(() -> {
                 isConnected = true;
+                chatStarted = true; // 채팅이 시작되었음을 표시
                 inputField.setEnabled(true);
                 sendButton.setEnabled(true);
                 addMessage("시스템", "매칭 완료! 대화를 시작하세요.", false);
+                // 상대방 ID 및 username 저장
+                try {
+                    System.out.println("matched 이벤트 수신: args.length=" + args.length);
+                    if (args.length > 0) {
+                        String argStr = args[0].toString();
+                        System.out.println("matched 이벤트 데이터: " + argStr);
+                        JSONObject data = new JSONObject(argStr);
+                        partnerId = data.optString("partnerId", "anonymous");
+                        partnerUsername = data.optString("partnerUsername", "unknown");
+                        System.out.println("매칭 완료: partnerId=" + partnerId + ", partnerUsername=" + partnerUsername);
+                        
+                        if (partnerUsername == null || partnerUsername.equals("unknown") || partnerUsername.equals("anonymous")) {
+                            System.err.println("경고: partnerUsername이 유효하지 않습니다: " + partnerUsername);
+                        }
+                    } else {
+                        System.err.println("경고: matched 이벤트에 데이터가 없습니다.");
+                        partnerId = "anonymous";
+                        partnerUsername = "unknown";
+                    }
+                } catch (Exception e) {
+                    System.err.println("matched 이벤트 처리 중 오류 발생:");
+                    e.printStackTrace();
+                    partnerId = "anonymous";
+                    partnerUsername = "unknown";
+                }
             });
         });
     }
@@ -348,15 +403,105 @@ public class RandomChatFrame extends JFrame {
     }
 
     private void closeWindow() {
-        // 매칭 종료 이벤트만 전송하고 소켓 연결은 유지
+        // 평점 다이얼로그 표시 후 종료
+        showRatingAndClose();
+    }
+    
+    private void showRatingAndClose() {
+        // 평점 다이얼로그 표시 (이미 표시된 경우 중복 방지)
+        if (ratingShown) {
+            // 이미 평점을 표시했으면 바로 종료
+            closeWithoutRating();
+            return;
+        }
+        
+        // 채팅이 시작되었고 사용자 정보가 있으면 평점 다이얼로그 표시
+        // isConnected가 false여도 (상대방이 먼저 종료했어도) 평점을 남길 수 있음
+        if (currentUser != null && chatStarted) {
+            ratingShown = true;
+            RatingDialog ratingDialog = new RatingDialog(this);
+            int rating = ratingDialog.showRatingDialog();
+            
+            if (rating > 0) {
+                // 평점 저장
+                try {
+                    RatingService ratingService = new RatingService();
+                    // partnerId는 Socket ID이거나 username일 수 있음
+                    // 실제 username을 사용해야 함
+                    // partnerUsername 사용
+                    String ratedUsername = partnerUsername;
+                    System.out.println("평점 저장 시도: currentUser.username=" + currentUser.username + ", partnerUsername=" + partnerUsername);
+                    
+                    if (ratedUsername == null || ratedUsername.isBlank() || ratedUsername.equals("anonymous") || ratedUsername.equals("unknown")) {
+                        // partnerUsername이 없으면 경고 메시지와 함께 디버그 정보 출력
+                        System.err.println("평점 저장 실패: 상대방 username이 없습니다.");
+                        System.err.println("  - partnerId: " + partnerId);
+                        System.err.println("  - partnerUsername: " + partnerUsername);
+                        System.err.println("  - chatStarted: " + chatStarted);
+                        System.err.println("  - isConnected: " + isConnected);
+                        
+                        JOptionPane.showMessageDialog(this, 
+                            "상대방 정보를 확인할 수 없어 평점을 저장할 수 없습니다.\n" +
+                            "partnerUsername: " + (partnerUsername != null ? partnerUsername : "null"), 
+                            "평점 저장 실패", 
+                            JOptionPane.WARNING_MESSAGE);
+                    } else {
+                        try {
+                            ratingService.createRating(currentUser.username, ratedUsername, rating);
+                            JOptionPane.showMessageDialog(this, 
+                                "평점이 저장되었습니다. 감사합니다!", 
+                                "평점 제출 완료", 
+                                JOptionPane.INFORMATION_MESSAGE);
+                        } catch (IllegalArgumentException e) {
+                            JOptionPane.showMessageDialog(this, 
+                                "평점 저장 실패: " + e.getMessage(), 
+                                "평점 저장 오류", 
+                                JOptionPane.ERROR_MESSAGE);
+                            System.err.println("평점 저장 실패: " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    // 사용자에게 알림 표시
+                    JOptionPane.showMessageDialog(this, 
+                        "평점 저장 실패: " + e.getMessage(), 
+                        "평점 저장 오류", 
+                        JOptionPane.ERROR_MESSAGE);
+                    System.err.println("평점 저장 실패: " + e.getMessage());
+                    e.printStackTrace();
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(this, 
+                        "평점 저장 중 오류가 발생했습니다: " + e.getMessage(), 
+                        "평점 저장 오류", 
+                        JOptionPane.ERROR_MESSAGE);
+                    System.err.println("평점 저장 실패: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        closeWithoutRating();
+    }
+    
+    private void closeWithoutRating() {
+        // 매칭 종료 이벤트 전송 (서버에서 매칭 상태 정리를 위해 필요)
+        // 서버가 상대방에게 partnerDisconnected를 보내지만, 
+        // 상대방의 창은 자동으로 닫히지 않도록 이미 수정함
         if (socket != null && socket.connected()) {
             System.out.println("매칭 종료 요청 (소켓 연결 유지)");
             socket.emit("endMatching");
             // 소켓 연결은 유지 - disconnect() 호출하지 않음
         }
+        
         // 채팅 메시지 초기화
         chatArea.setText("<html><body></body></html>");
-        dispose();
+        
+        // dispose() 대신 setVisible(false)를 사용하여 소켓 연결 유지
+        // dispose()는 창 리소스를 해제하면서 소켓 연결도 끊을 수 있음
+        // setVisible(false)는 창만 숨기고 리소스는 유지하여 소켓 연결도 유지됨
+        setVisible(false);
+        
+        // 창이 닫혔지만 소켓은 유지되어 상대방이 평점을 남길 수 있음
     }
 }
 

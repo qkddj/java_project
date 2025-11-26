@@ -16,6 +16,7 @@ public class ChatServer {
     private final Queue<SocketIOClient> matchQueue = new LinkedList<>();
     private final Map<String, String> matchedPairs = new HashMap<>(); // clientId -> matchedClientId
     private final Map<String, SocketIOClient> clients = new HashMap<>();
+    private final Map<String, String> clientIdToUsername = new HashMap<>(); // clientId -> username
     private int port = 3001;
     private boolean isRunning = false;
 
@@ -67,9 +68,20 @@ public class ChatServer {
         server.addDisconnectListener(new DisconnectListener() {
             @Override
             public void onDisconnect(SocketIOClient client) {
-                System.out.println("클라이언트 연결 해제: " + client.getSessionId());
+                String clientId = client.getSessionId().toString();
+                System.out.println("클라이언트 연결 해제: " + clientId);
                 endMatching(client);
-                clients.remove(client.getSessionId().toString());
+                clients.remove(clientId);
+                clientIdToUsername.remove(clientId);
+            }
+        });
+
+        // username 등록
+        server.addEventListener("registerUsername", String.class, (client, username, ackSender) -> {
+            String clientId = client.getSessionId().toString();
+            if (username != null && !username.isBlank() && !username.equals("unknown")) {
+                clientIdToUsername.put(clientId, username);
+                System.out.println("Username 등록: clientId=" + clientId + ", username=" + username);
             }
         });
 
@@ -156,10 +168,23 @@ public class ChatServer {
             matchedPairs.put(user1Id, user2Id);
             matchedPairs.put(user2Id, user1Id);
 
-            user1.sendEvent("matched", new JSONObject().put("partnerId", user2Id).toString());
-            user2.sendEvent("matched", new JSONObject().put("partnerId", user1Id).toString());
+            // username 가져오기
+            String user1Username = clientIdToUsername.getOrDefault(user1Id, "unknown");
+            String user2Username = clientIdToUsername.getOrDefault(user2Id, "unknown");
 
-            System.out.println("매칭 완료: " + user1Id + " <-> " + user2Id);
+            // matched 이벤트에 partnerId (Socket ID)와 partnerUsername 전달
+            JSONObject user1Data = new JSONObject();
+            user1Data.put("partnerId", user2Id);
+            user1Data.put("partnerUsername", user2Username);
+            
+            JSONObject user2Data = new JSONObject();
+            user2Data.put("partnerId", user1Id);
+            user2Data.put("partnerUsername", user1Username);
+
+            user1.sendEvent("matched", user1Data.toString());
+            user2.sendEvent("matched", user2Data.toString());
+
+            System.out.println("매칭 완료: " + user1Id + " (" + user1Username + ") <-> " + user2Id + " (" + user2Username + ")");
         }
     }
 
