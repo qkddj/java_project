@@ -98,20 +98,15 @@ public class MatchManager {
         }
         waitingQueue.removeAll(toRemove);
         
-        int queueSize = waitingQueue.size();
-        if (queueSize >= 2) {
-            System.out.println("매칭 시도: 대기열 크기=" + queueSize);
-        }
-        
         // 대기열에 2명 이상이 있으면 매칭 시도
-        // 우선순위: 평점 합이 4점 이상인 쌍을 먼저 매칭
+        // 조건: 두 사용자의 평균 평점이 4점 이상이면 매칭
         while (waitingQueue.size() >= 2) {
             List<MatchSocket> queueList = new ArrayList<>(waitingQueue);
             MatchSocket user1 = null;
             MatchSocket user2 = null;
-            double bestRatingSum = -1;
+            double bestCombinedAvg = -1;
             
-            // 모든 가능한 쌍을 확인하여 평점 합이 4점 이상인 쌍을 우선 찾기
+            // 모든 가능한 쌍을 확인하여 평균 평점이 가장 높은 쌍을 찾기
             for (int i = 0; i < queueList.size(); i++) {
                 for (int j = i + 1; j < queueList.size(); j++) {
                     MatchSocket u1 = queueList.get(i);
@@ -123,18 +118,18 @@ public class MatchManager {
                     String u2Username = getUsernameForMatching(u2);
                     double u1Rating = getAverageRating(u1Username);
                     double u2Rating = getAverageRating(u2Username);
-                    double ratingSum = u1Rating + u2Rating;
+                    double combinedAvg = (u1Rating + u2Rating) / 2.0;
                     
-                    // 평점 합이 4점 이상이고, 현재까지 찾은 것보다 높으면 선택
-                    if (ratingSum >= 4.0 && ratingSum > bestRatingSum) {
+                    // 평균 평점이 4점 이상이고, 현재까지 찾은 것보다 높으면 선택
+                    if (combinedAvg >= 4.0 && combinedAvg > bestCombinedAvg) {
                         user1 = u1;
                         user2 = u2;
-                        bestRatingSum = ratingSum;
+                        bestCombinedAvg = combinedAvg;
                     }
                 }
             }
             
-            // 우선순위 쌍을 찾지 못했으면 일반 순서로 매칭
+            // 평균 4점 이상인 쌍을 찾지 못했으면 일반 순서로 매칭 (단, 조건 체크는 아래에서)
             if (user1 == null || user2 == null) {
                 user1 = waitingQueue.poll();
                 user2 = waitingQueue.poll();
@@ -187,12 +182,8 @@ public class MatchManager {
             // 평점 체크: 두 사용자의 평균 평점 계산
             double user1AvgRating = getAverageRating(user1Username);
             double user2AvgRating = getAverageRating(user2Username);
-            double ratingSum = user1AvgRating + user2AvgRating; // 두 사람의 평점 합
-            double combinedAvgRating = ratingSum / 2.0; // 평균
-            
-            System.out.println("매칭 체크: " + user1Username + " (평균: " + user1AvgRating + ") <-> " + 
-                             user2Username + " (평균: " + user2AvgRating + ")");
-            System.out.println("  평점 합: " + ratingSum + ", 평균: " + combinedAvgRating);
+            double ratingSum = user1AvgRating + user2AvgRating;
+            double combinedAvgRating = ratingSum / 2.0;
             
             // 유저 쌍 키 생성 (정렬하여 항상 같은 순서로)
             String pairKey = user1.getUserId().compareTo(user2.getUserId()) < 0 
@@ -201,49 +192,39 @@ public class MatchManager {
             
             // 이미 매칭 실패한 쌍이면 건너뛰기 (무한 루프 방지)
             if (failedPairs.contains(pairKey)) {
-                System.out.println("  매칭 건너뜀: 이미 실패한 쌍 (무한 루프 방지)");
-                // 한쪽만 대기열에 추가 (다른 유저와 매칭 기회 제공)
                 if (user1.isOpen() && sockets.containsKey(user1.getUserId())) {
                     waitingQueue.offer(user1);
                 }
                 continue;
             }
             
-            // 개별 평균 평점이 2점 미만이면 매칭하지 않음
-            if (user1AvgRating < 2.0) {
-                System.out.println("  매칭 실패: " + user1Username + "의 평균 평점이 2점 미만 (" + user1AvgRating + ")");
+            // 개별 평균 평점이 2점 이하면 매칭하지 않음
+            if (user1AvgRating <= 2.0) {
                 failedPairs.add(pairKey);
-                // 한쪽만 대기열에 추가 (다른 유저와 매칭 기회 제공)
                 if (user2.isOpen() && sockets.containsKey(user2.getUserId())) {
                     waitingQueue.offer(user2);
                 }
                 continue;
             }
             
-            if (user2AvgRating < 2.0) {
-                System.out.println("  매칭 실패: " + user2Username + "의 평균 평점이 2점 미만 (" + user2AvgRating + ")");
+            if (user2AvgRating <= 2.0) {
                 failedPairs.add(pairKey);
-                // 한쪽만 대기열에 추가 (다른 유저와 매칭 기회 제공)
                 if (user1.isOpen() && sockets.containsKey(user1.getUserId())) {
                     waitingQueue.offer(user1);
                 }
                 continue;
             }
             
-            // 두 사람의 평점 합이 2점 미만이면 매칭하지 않음
-            if (ratingSum < 2.0) {
-                System.out.println("  매칭 실패: 두 사람의 평점 합이 2점 미만 (" + ratingSum + ")");
+            // 두 사용자의 평균 평점이 4점 미만이면 매칭하지 않음
+            if (combinedAvgRating < 4.0) {
                 failedPairs.add(pairKey);
-                // 한쪽만 대기열에 추가 (다른 유저와 매칭 기회 제공)
                 if (user1.isOpen() && sockets.containsKey(user1.getUserId())) {
                     waitingQueue.offer(user1);
                 }
+                if (user2.isOpen() && sockets.containsKey(user2.getUserId())) {
+                    waitingQueue.offer(user2);
+                }
                 continue;
-            }
-            
-            // 평점 합이 4점 이상이면 우선순위 매칭 (이미 우선순위로 선택되었으므로 바로 매칭 진행)
-            if (ratingSum >= 4.0) {
-                System.out.println("  ✅ 우선순위 매칭: 평점 합이 4점 이상 (" + ratingSum + ")");
             }
             
             // 매칭 성공 시 실패 기록에서 제거
@@ -252,9 +233,9 @@ public class MatchManager {
             // 두 사용자가 모두 유효하고 평점 조건을 만족하면 매칭
             String roomId = UUID.randomUUID().toString();
             
-            System.out.println("매칭 완료: " + user1Username + " <-> " + user2Username);
-            System.out.println("  user1 userId: " + user1.getUserId() + ", username: " + user1Username);
-            System.out.println("  user2 userId: " + user2.getUserId() + ", username: " + user2Username);
+            // 매칭 로그 출력
+            System.out.println("[매칭] " + user1Username + "(" + String.format("%.1f", user1AvgRating) + ") ↔ " + 
+                             user2Username + "(" + String.format("%.1f", user2AvgRating) + ") [평균: " + String.format("%.1f", combinedAvgRating) + "]");
             
             Room room = new Room(roomId, user1, user2);
             rooms.put(roomId, room);
@@ -292,65 +273,52 @@ public class MatchManager {
     }
 
     /**
-     * 사용자의 평균 평점을 ratings 컬렉션에서 조회합니다.
-     * serviceType이 "average"인 문서에서 값을 가져옵니다.
-     * 
+     * 사용자의 평균 평점을 실시간으로 계산합니다.
      * @param username 사용자명
-     * @return 평균 평점 (평점이 없으면 5.0 반환, 즉 신규 사용자는 기본적으로 매칭 가능)
+     * @return 평균 평점 (없으면 5.0)
      */
     private double getAverageRating(String username) {
         try {
-            // username으로부터 ObjectId 조회
             Document userDoc = Mongo.users().find(Filters.eq("username", username)).first();
-            if (userDoc == null) {
-                System.out.println("[평점 조회] 사용자를 찾을 수 없음: " + username + " -> 기본값 5.0");
-                return 5.0; // 사용자를 찾을 수 없으면 기본값 5.0 (신규 사용자)
-            }
+            if (userDoc == null) return 5.0;
             
             Object id = userDoc.get("_id");
-            if (!(id instanceof org.bson.types.ObjectId)) {
-                System.out.println("[평점 조회] 사용자 ID가 유효하지 않음: " + username + " -> 기본값 5.0");
-                return 5.0;
-            }
+            if (!(id instanceof org.bson.types.ObjectId)) return 5.0;
             
             org.bson.types.ObjectId userId = (org.bson.types.ObjectId) id;
             
-            // ratings 컬렉션에서 평균 평점 조회 (serviceType이 "average"인 문서)
-            Document avgDoc = Mongo.ratings().find(
-                Filters.and(
-                    Filters.eq("userId", userId),
-                    Filters.eq("serviceType", "average")
+            // 해당 사용자가 받은 모든 평점을 실시간으로 계산
+            double sum = 0.0;
+            int count = 0;
+            
+            for (Document doc : Mongo.ratings().find(
+                Filters.or(
+                    Filters.eq("user1Id", userId),
+                    Filters.eq("user2Id", userId)
                 )
-            ).first();
-            
-            if (avgDoc == null) {
-                // 평균 평점 문서가 없으면 기본값 5.0 (신규 사용자 또는 아직 평점이 없는 경우)
-                System.out.println("[평점 조회] 평균 평점이 없음: " + username + " -> 기본값 5.0");
-                return 5.0;
+            )) {
+                org.bson.types.ObjectId docUser1Id = doc.get("user1Id", org.bson.types.ObjectId.class);
+                org.bson.types.ObjectId docUser2Id = doc.get("user2Id", org.bson.types.ObjectId.class);
+                
+                // 해당 사용자가 받은 평점만 추출
+                if (docUser1Id != null && docUser1Id.equals(userId)) {
+                    Object user1Rating = doc.get("user1Rating");
+                    if (user1Rating != null && user1Rating instanceof Number) {
+                        sum += ((Number) user1Rating).doubleValue();
+                        count++;
+                    }
+                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
+                    Object user2Rating = doc.get("user2Rating");
+                    if (user2Rating != null && user2Rating instanceof Number) {
+                        sum += ((Number) user2Rating).doubleValue();
+                        count++;
+                    }
+                }
             }
             
-            Object ar = avgDoc.get("averageRating");
-            double avgRating;
-            
-            if (ar == null) {
-                System.out.println("[평점 조회] 평균 평점 값이 null: " + username + " -> 기본값 5.0");
-                avgRating = 5.0;
-            } else if (ar instanceof Double) {
-                avgRating = (Double) ar;
-            } else if (ar instanceof Number) {
-                avgRating = ((Number) ar).doubleValue();
-            } else {
-                System.out.println("[평점 조회] 평균 평점 타입이 유효하지 않음: " + username + " -> 기본값 5.0");
-                avgRating = 5.0;
-            }
-            
-            System.out.println("[평점 조회] " + username + ": 평균 " + avgRating + " (ratings 컬렉션에서 조회)");
-            return avgRating;
-            
+            return count > 0 ? sum / count : 5.0;
         } catch (Exception e) {
-            System.err.println("[평점 조회] 오류 발생: " + username + " - " + e.getMessage());
-            e.printStackTrace();
-            return 5.0; // 오류 발생 시 기본값 5.0
+            return 5.0;
         }
     }
 

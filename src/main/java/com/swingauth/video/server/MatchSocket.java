@@ -252,14 +252,8 @@ public class MatchSocket implements WebSocketListener {
                 
                 Mongo.ratings().insertOne(newDoc);
                 
-                // 평점 저장 후 두 유저 모두의 평균 평점 재계산 및 업데이트
-                updateUserAverageRating(user1Id);
-                updateUserAverageRating(user2Id);
-                
-                // 두 유저 쌍의 평균 평점 계산 및 저장 (serviceType이 "video"인 경우만)
-                if ("video".equals(serviceType)) {
-                    updatePairAverageRating(user1Id, user2Id);
-                }
+                // 두 유저 쌍의 평균 평점 계산 및 저장
+                updatePairAverageRating(user1Id, user2Id, serviceType);
                 
                 return true;
             } else {
@@ -274,14 +268,8 @@ public class MatchSocket implements WebSocketListener {
                 
                 Mongo.ratings().updateOne(filter, update);
                 
-                // 평점 업데이트 후 두 유저 모두의 평균 평점 재계산 및 업데이트
-                updateUserAverageRating(user1Id);
-                updateUserAverageRating(user2Id);
-                
-                // 두 유저 쌍의 평균 평점 계산 및 저장 (serviceType이 "video"인 경우만)
-                if ("video".equals(serviceType)) {
-                    updatePairAverageRating(user1Id, user2Id);
-                }
+                // 두 유저 쌍의 평균 평점 계산 및 저장
+                updatePairAverageRating(user1Id, user2Id, serviceType);
                 
                 return true;
             }
@@ -334,78 +322,16 @@ public class MatchSocket implements WebSocketListener {
     }
 
     /**
-     * 사용자의 평균 평점을 재계산하고 ratings 컬렉션에 저장합니다.
-     * @param userId 사용자 ObjectId
-     */
-    private void updateUserAverageRating(ObjectId userId) {
-        try {
-            // 해당 사용자가 받은 모든 평점 조회 (serviceType이 "average"가 아닌 것만)
-            double sum = 0.0;
-            int count = 0;
-            
-            for (Document doc : Mongo.ratings().find(
-                Filters.and(
-                    Filters.or(
-                        Filters.eq("user1Id", userId),
-                        Filters.eq("user2Id", userId)
-                    ),
-                    Filters.ne("serviceType", "average") // 평균 평점 문서는 제외
-                )
-            )) {
-                ObjectId docUser1Id = doc.get("user1Id", ObjectId.class);
-                ObjectId docUser2Id = doc.get("user2Id", ObjectId.class);
-                
-                // 해당 사용자가 받은 평점만 추출
-                if (docUser1Id != null && docUser1Id.equals(userId)) {
-                    Object user1Rating = doc.get("user1Rating");
-                    if (user1Rating != null && user1Rating instanceof Number) {
-                        sum += ((Number) user1Rating).doubleValue();
-                        count++;
-                    }
-                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
-                    Object user2Rating = doc.get("user2Rating");
-                    if (user2Rating != null && user2Rating instanceof Number) {
-                        sum += ((Number) user2Rating).doubleValue();
-                        count++;
-                    }
-                }
-            }
-            
-            // 평균 계산
-            double averageRating = count > 0 ? sum / count : 5.0;
-            
-            // ratings 컬렉션에 평균 평점 저장/업데이트 (serviceType: "average")
-            Document filter = new Document("userId", userId)
-                .append("serviceType", "average");
-            
-            Document existingDoc = Mongo.ratings().find(filter).first();
-            
-            if (existingDoc != null) {
-                Document updateDoc = new Document("$set", new Document("averageRating", averageRating));
-                Mongo.ratings().updateOne(filter, updateDoc);
-            } else {
-                Document newDoc = new Document("userId", userId)
-                    .append("serviceType", "average")
-                    .append("averageRating", averageRating);
-                Mongo.ratings().insertOne(newDoc);
-            }
-            
-        } catch (Exception e) {
-            System.err.println("[오류] 평균 평점 업데이트 실패: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 average 필드에 저장합니다.
-     * user1Id, user2Id, serviceType이 "video"인 문서의 user1Rating과 user2Rating의 평균을 계산합니다.
+     * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 averageRating 필드에 저장합니다.
      * @param user1Id 첫 번째 유저 ObjectId
      * @param user2Id 두 번째 유저 ObjectId
+     * @param serviceType 서비스 타입
      */
-    private void updatePairAverageRating(ObjectId user1Id, ObjectId user2Id) {
+    private void updatePairAverageRating(ObjectId user1Id, ObjectId user2Id, String serviceType) {
         try {
             Document filter = new Document("user1Id", user1Id)
                 .append("user2Id", user2Id)
-                .append("serviceType", "video");
+                .append("serviceType", serviceType);
             
             Document ratingDoc = Mongo.ratings().find(filter).first();
             if (ratingDoc == null) return;
@@ -436,48 +362,11 @@ public class MatchSocket implements WebSocketListener {
                 pairAverage = (user1Rating + user2Rating) / 2.0;
             }
             
-            Document update = new Document("$set", new Document("average", pairAverage));
+            Document update = new Document("$set", new Document("averageRating", pairAverage));
             Mongo.ratings().updateOne(filter, update);
             
         } catch (Exception e) {
             System.err.println("[오류] 유저 쌍 평균 평점 업데이트 실패: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 사용자의 평균 평점을 ratings 컬렉션에서 조회합니다.
-     * serviceType이 "average"인 문서에서 값을 가져옵니다.
-     * @param userId 사용자 ObjectId
-     * @return 평균 평점 (없으면 5.0)
-     */
-    private double getUserAverageRating(ObjectId userId) {
-        try {
-            // ratings 컬렉션에서 평균 평점 조회 (serviceType이 "average"인 문서)
-            Document avgDoc = Mongo.ratings().find(
-                Filters.and(
-                    Filters.eq("userId", userId),
-                    Filters.eq("serviceType", "average")
-                )
-            ).first();
-            
-            if (avgDoc == null) {
-                return 5.0; // 평균 평점이 없으면 기본값 5.0
-            }
-            
-            Object ar = avgDoc.get("averageRating");
-            if (ar == null) {
-                return 5.0;
-            } else if (ar instanceof Double) {
-                return (Double) ar;
-            } else if (ar instanceof Number) {
-                return ((Number) ar).doubleValue();
-            } else {
-                return 5.0;
-            }
-            
-        } catch (Exception e) {
-            System.err.println("[사용자 평균 평점 조회] 오류 발생: userId=" + userId + " - " + e.getMessage());
-            return 5.0;
         }
     }
 }

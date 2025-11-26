@@ -10,7 +10,7 @@ import org.bson.types.ObjectId;
 public class RatingUtil {
     
     /**
-     * 특정 사용자의 평균 평점을 조회합니다.
+     * 특정 사용자의 평균 평점을 실시간으로 계산합니다.
      * @param username 사용자명
      * @return 평균 평점 (없으면 5.0)
      */
@@ -24,22 +24,35 @@ public class RatingUtil {
             
             ObjectId userId = (ObjectId) id;
             
-            var avgDoc = Mongo.ratings().find(
-                Filters.and(
-                    Filters.eq("userId", userId),
-                    Filters.eq("serviceType", "average")
+            // 해당 사용자가 받은 모든 평점을 실시간으로 계산
+            double sum = 0.0;
+            int count = 0;
+            
+            for (var doc : Mongo.ratings().find(
+                Filters.or(
+                    Filters.eq("user1Id", userId),
+                    Filters.eq("user2Id", userId)
                 )
-            ).first();
-            
-            if (avgDoc == null) return 5.0;
-            
-            Object ar = avgDoc.get("averageRating");
-            if (ar instanceof Double) {
-                return (Double) ar;
-            } else if (ar instanceof Number) {
-                return ((Number) ar).doubleValue();
+            )) {
+                ObjectId docUser1Id = doc.get("user1Id", ObjectId.class);
+                ObjectId docUser2Id = doc.get("user2Id", ObjectId.class);
+                
+                if (docUser1Id != null && docUser1Id.equals(userId)) {
+                    Object user1Rating = doc.get("user1Rating");
+                    if (user1Rating != null && user1Rating instanceof Number) {
+                        sum += ((Number) user1Rating).doubleValue();
+                        count++;
+                    }
+                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
+                    Object user2Rating = doc.get("user2Rating");
+                    if (user2Rating != null && user2Rating instanceof Number) {
+                        sum += ((Number) user2Rating).doubleValue();
+                        count++;
+                    }
+                }
             }
-            return 5.0;
+            
+            return count > 0 ? sum / count : 5.0;
         } catch (Exception e) {
             return 5.0;
         }
