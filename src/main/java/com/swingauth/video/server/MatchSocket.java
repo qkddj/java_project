@@ -255,9 +255,22 @@ public class MatchSocket implements WebSocketListener {
                 // 두 유저 쌍의 평균 평점 계산 및 저장
                 updatePairAverageRating(user1Id, user2Id, serviceType);
                 
+                // 피평가자(partnerUser)의 평점 합계와 횟수 업데이트 (새 평점)
+                updateUserRatingStats(partnerUserId, rating, null, serviceType);
+                
                 return true;
             } else {
                 // 기존 문서 업데이트: 같은 유저 쌍이 다시 만난 경우, 기존 평점을 새 점수로 변경
+                // 기존 평점 가져오기
+                Integer oldRating = null;
+                if (isUser1) {
+                    Object oldVal = existingDoc.get("user1Rating");
+                    if (oldVal instanceof Number) oldRating = ((Number) oldVal).intValue();
+                } else {
+                    Object oldVal = existingDoc.get("user2Rating");
+                    if (oldVal instanceof Number) oldRating = ((Number) oldVal).intValue();
+                }
+                
                 Document setDoc = new Document();
                 if (isUser1) {
                     setDoc.append("user1Rating", rating);
@@ -270,6 +283,9 @@ public class MatchSocket implements WebSocketListener {
                 
                 // 두 유저 쌍의 평균 평점 계산 및 저장
                 updatePairAverageRating(user1Id, user2Id, serviceType);
+                
+                // 피평가자(partnerUser)의 평점 통계 업데이트
+                updateUserRatingStats(partnerUserId, rating, oldRating, serviceType);
                 
                 return true;
             }
@@ -318,6 +334,53 @@ public class MatchSocket implements WebSocketListener {
             return new ObjectId[]{id1, id2};
         } else {
             return new ObjectId[]{id2, id1};
+        }
+    }
+
+    /**
+     * 유저의 평점 통계(합계, 횟수)를 업데이트합니다.
+     * @param userId 유저 ObjectId
+     * @param newRating 새 평점 값
+     * @param oldRating 기존 평점 값 (null이면 새 평점)
+     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
+     */
+    private void updateUserRatingStats(ObjectId userId, int newRating, Integer oldRating, String serviceType) {
+        try {
+            Document incDoc = new Document();
+            boolean isNew = (oldRating == null);
+            
+            if (isNew) {
+                // 새 평점: 합계에 새 평점 추가, 횟수 +1
+                incDoc.append("totalRatingReceived", newRating);
+                incDoc.append("ratingCount", 1);
+                
+                if ("video".equals(serviceType)) {
+                    incDoc.append("videoTotalRating", newRating);
+                    incDoc.append("videoRatingCount", 1);
+                } else if ("randomChat".equals(serviceType)) {
+                    incDoc.append("chatTotalRating", newRating);
+                    incDoc.append("chatRatingCount", 1);
+                }
+            } else {
+                // 평점 변경: 기존 평점 빼고 새 평점 더하기 (차이값)
+                int diff = newRating - oldRating;
+                if (diff != 0) {
+                    incDoc.append("totalRatingReceived", diff);
+                    
+                    if ("video".equals(serviceType)) {
+                        incDoc.append("videoTotalRating", diff);
+                    } else if ("randomChat".equals(serviceType)) {
+                        incDoc.append("chatTotalRating", diff);
+                    }
+                }
+            }
+            
+            if (!incDoc.isEmpty()) {
+                Document update = new Document("$inc", incDoc);
+                Mongo.users().updateOne(Filters.eq("_id", userId), update);
+            }
+        } catch (Exception e) {
+            System.err.println("[오류] 유저 평점 통계 업데이트 실패: " + e.getMessage());
         }
     }
 

@@ -1,7 +1,6 @@
 package com.swingauth.ui;
 
 import com.swingauth.model.User;
-import com.swingauth.util.RatingUtil;
 import io.socket.client.Socket;
 
 import javax.swing.*;
@@ -122,15 +121,6 @@ public class MainFrame extends JFrame {
         matchingFrameRef[0].setVisible(true);
     });
     btnVideo.addActionListener(e -> {
-        // 평점 체크 (2점 이하면 매칭 불가)
-        double avgRating = RatingUtil.getUserAverageRating(user.username);
-        if (avgRating <= 2.0) {
-            JOptionPane.showMessageDialog(this, 
-                "평점이 낮아 매칭이 안됩니다.\n(현재 평점: " + String.format("%.1f", avgRating) + "점)", 
-                "매칭 불가", 
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
         SwingUtilities.invokeLater(() -> {
             new VideoCallFrame(user);
         });

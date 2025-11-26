@@ -106,7 +106,7 @@ public class MatchManager {
             MatchSocket user2 = null;
             double bestCombinedAvg = -1;
             
-            // 모든 가능한 쌍을 확인하여 평균 평점이 가장 높은 쌍을 찾기
+            // 모든 가능한 쌍을 확인하여 매칭 가능한 쌍 중 평균 평점이 가장 높은 쌍을 찾기
             for (int i = 0; i < queueList.size(); i++) {
                 for (int j = i + 1; j < queueList.size(); j++) {
                     MatchSocket u1 = queueList.get(i);
@@ -116,12 +116,20 @@ public class MatchManager {
                     
                     String u1Username = getUsernameForMatching(u1);
                     String u2Username = getUsernameForMatching(u2);
+                    
+                    // 이 두 유저 쌍의 기존 평점 확인 (이전에 만난 적 있는 경우)
+                    double pairAvg = getPairAverageRating(u1Username, u2Username);
+                    if (pairAvg >= 0 && pairAvg <= 2.0) {
+                        // 이전에 만났고, 평균 평점이 2점 이하면 매칭 불가
+                        continue;
+                    }
+                    
                     double u1Rating = getAverageRating(u1Username);
                     double u2Rating = getAverageRating(u2Username);
                     double combinedAvg = (u1Rating + u2Rating) / 2.0;
                     
-                    // 평균 평점이 4점 이상이고, 현재까지 찾은 것보다 높으면 선택
-                    if (combinedAvg >= 4.0 && combinedAvg > bestCombinedAvg) {
+                    // 매칭 가능한 쌍 중 평균 평점이 가장 높은 쌍 선택
+                    if (combinedAvg > bestCombinedAvg) {
                         user1 = u1;
                         user2 = u2;
                         bestCombinedAvg = combinedAvg;
@@ -129,15 +137,14 @@ public class MatchManager {
                 }
             }
             
-            // 평균 4점 이상인 쌍을 찾지 못했으면 일반 순서로 매칭 (단, 조건 체크는 아래에서)
+            // 매칭 가능한 쌍을 찾지 못했으면 대기
             if (user1 == null || user2 == null) {
-                user1 = waitingQueue.poll();
-                user2 = waitingQueue.poll();
-            } else {
-                // 우선순위 쌍을 대기열에서 제거
-                waitingQueue.remove(user1);
-                waitingQueue.remove(user2);
+                break;
             }
+            
+            // 선택된 쌍을 대기열에서 제거
+            waitingQueue.remove(user1);
+            waitingQueue.remove(user2);
             
             // 유효성 검사
             if (user1 == null || user2 == null) {
@@ -198,25 +205,9 @@ public class MatchManager {
                 continue;
             }
             
-            // 개별 평균 평점이 2점 이하면 매칭하지 않음
-            if (user1AvgRating <= 2.0) {
-                failedPairs.add(pairKey);
-                if (user2.isOpen() && sockets.containsKey(user2.getUserId())) {
-                    waitingQueue.offer(user2);
-                }
-                continue;
-            }
-            
-            if (user2AvgRating <= 2.0) {
-                failedPairs.add(pairKey);
-                if (user1.isOpen() && sockets.containsKey(user1.getUserId())) {
-                    waitingQueue.offer(user1);
-                }
-                continue;
-            }
-            
-            // 두 사용자의 평균 평점이 4점 미만이면 매칭하지 않음
-            if (combinedAvgRating < 4.0) {
+            // 이 두 유저 쌍의 기존 평점이 2점 이하면 매칭하지 않음
+            double pairAvgRating = getPairAverageRating(user1Username, user2Username);
+            if (pairAvgRating >= 0 && pairAvgRating <= 2.0) {
                 failedPairs.add(pairKey);
                 if (user1.isOpen() && sockets.containsKey(user1.getUserId())) {
                     waitingQueue.offer(user1);
@@ -237,12 +228,31 @@ public class MatchManager {
             System.out.println("[매칭] " + user1Username + "(" + String.format("%.1f", user1AvgRating) + ") ↔ " + 
                              user2Username + "(" + String.format("%.1f", user2AvgRating) + ") [평균: " + String.format("%.1f", combinedAvgRating) + "]");
             
+            // 두 유저의 영상통화 횟수 증가
+            incrementVideoCallCount(user1Username);
+            incrementVideoCallCount(user2Username);
+            
             Room room = new Room(roomId, user1, user2);
             rooms.put(roomId, room);
 
             // partnerUsername을 포함하여 전송
             user1.sendMatched(roomId, user2.getUserId(), user2Username);
             user2.sendMatched(roomId, user1.getUserId(), user1Username);
+        }
+    }
+    
+    /**
+     * 유저의 영상통화 횟수를 1 증가시킵니다.
+     * @param username 유저명
+     */
+    private void incrementVideoCallCount(String username) {
+        try {
+            Mongo.users().updateOne(
+                Filters.eq("username", username),
+                new Document("$inc", new Document("videoCallCount", 1))
+            );
+        } catch (Exception e) {
+            // 로그 생략
         }
     }
 
@@ -259,6 +269,9 @@ public class MatchManager {
         if (socket != null) {
             waitingQueue.remove(socket);
             
+            // 해당 유저와 관련된 failedPairs 기록 삭제 (재연결 시 다시 매칭 가능하도록)
+            failedPairs.removeIf(pairKey -> pairKey.contains(userId));
+            
             // 남은 대기 중인 클라이언트에게 업데이트된 상태 전송
             int otherPeopleCount = Math.max(0, waitingQueue.size() - 1);
             for (MatchSocket s : waitingQueue) {
@@ -269,6 +282,60 @@ public class MatchManager {
             
             // 대기열에서 제거된 후 다른 사용자들과 매칭 시도
             tryMatch();
+        }
+    }
+
+    /**
+     * 두 유저 쌍의 기존 평점 평균을 조회합니다.
+     * @param username1 유저1 이름
+     * @param username2 유저2 이름
+     * @return 해당 쌍의 평균 평점 (기록 없으면 -1 반환)
+     */
+    private double getPairAverageRating(String username1, String username2) {
+        try {
+            // username으로 ObjectId 조회
+            Document userDoc1 = Mongo.users().find(Filters.eq("username", username1)).first();
+            Document userDoc2 = Mongo.users().find(Filters.eq("username", username2)).first();
+            
+            if (userDoc1 == null || userDoc2 == null) return -1;
+            
+            Object id1 = userDoc1.get("_id");
+            Object id2 = userDoc2.get("_id");
+            
+            if (!(id1 instanceof org.bson.types.ObjectId) || !(id2 instanceof org.bson.types.ObjectId)) return -1;
+            
+            org.bson.types.ObjectId objId1 = (org.bson.types.ObjectId) id1;
+            org.bson.types.ObjectId objId2 = (org.bson.types.ObjectId) id2;
+            
+            // user1Id, user2Id 정렬 (일관된 순서로)
+            org.bson.types.ObjectId sortedId1, sortedId2;
+            if (objId1.compareTo(objId2) < 0) {
+                sortedId1 = objId1;
+                sortedId2 = objId2;
+            } else {
+                sortedId1 = objId2;
+                sortedId2 = objId1;
+            }
+            
+            // ratings 컬렉션에서 해당 유저 쌍의 문서 조회
+            Document ratingDoc = Mongo.ratings().find(
+                Filters.and(
+                    Filters.eq("user1Id", sortedId1),
+                    Filters.eq("user2Id", sortedId2)
+                )
+            ).first();
+            
+            if (ratingDoc == null) return -1; // 기록 없음
+            
+            // averageRating 조회
+            Object avgRating = ratingDoc.get("averageRating");
+            if (avgRating instanceof Number) {
+                return ((Number) avgRating).doubleValue();
+            }
+            
+            return -1;
+        } catch (Exception e) {
+            return -1;
         }
     }
 

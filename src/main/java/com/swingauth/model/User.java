@@ -24,8 +24,20 @@ public class User {
   public String city;        // 시/군/구
   public String neighborhood; // region + city 등 파생표시
 
-  // 평점 정보
-  public Double averageRating; // 평균 평점 (DB에 저장됨)
+  // 평점 정보 (전체)
+  public Double averageRating; // 전체 평균 평점
+  public Integer totalRatingReceived; // 전체 받은 평점의 합
+  public Integer ratingCount; // 전체 받은 평점 횟수
+  
+  // 랜덤 영상통화 통계
+  public Integer videoCallCount; // 영상통화 진행 횟수
+  public Integer videoTotalRating; // 영상통화에서 받은 평점 합
+  public Integer videoRatingCount; // 영상통화에서 받은 평점 횟수
+  
+  // 랜덤 채팅 통계
+  public Integer randomChatCount; // 랜덤채팅 진행 횟수
+  public Integer chatTotalRating; // 랜덤채팅에서 받은 평점 합
+  public Integer chatRatingCount; // 랜덤채팅에서 받은 평점 횟수
 
   public Document toDoc() {
     return new Document(Map.of(
@@ -43,7 +55,15 @@ public class User {
     .append("region", region)
     .append("city", city)
     .append("neighborhood", neighborhood)
-    .append("averageRating", averageRating);
+    .append("averageRating", averageRating)
+    .append("totalRatingReceived", totalRatingReceived)
+    .append("ratingCount", ratingCount)
+    .append("videoCallCount", videoCallCount)
+    .append("videoTotalRating", videoTotalRating)
+    .append("videoRatingCount", videoRatingCount)
+    .append("randomChatCount", randomChatCount)
+    .append("chatTotalRating", chatTotalRating)
+    .append("chatRatingCount", chatRatingCount);
   }
 
   public static User fromDoc(Document d) {
@@ -84,6 +104,86 @@ public class User {
       u.averageRating = ((Number) ar).doubleValue();
     } else {
       u.averageRating = null;
+    }
+    
+    // totalRatingReceived: Integer 또는 Number 타입 처리
+    Object trr = d.get("totalRatingReceived");
+    if (trr instanceof Integer) {
+      u.totalRatingReceived = (Integer) trr;
+    } else if (trr instanceof Number) {
+      u.totalRatingReceived = ((Number) trr).intValue();
+    } else {
+      u.totalRatingReceived = null;
+    }
+    
+    // ratingCount: Integer 또는 Number 타입 처리
+    Object rc = d.get("ratingCount");
+    if (rc instanceof Integer) {
+      u.ratingCount = (Integer) rc;
+    } else if (rc instanceof Number) {
+      u.ratingCount = ((Number) rc).intValue();
+    } else {
+      u.ratingCount = null;
+    }
+    
+    // videoCallCount: Integer 또는 Number 타입 처리
+    Object vcc = d.get("videoCallCount");
+    if (vcc instanceof Integer) {
+      u.videoCallCount = (Integer) vcc;
+    } else if (vcc instanceof Number) {
+      u.videoCallCount = ((Number) vcc).intValue();
+    } else {
+      u.videoCallCount = null;
+    }
+    
+    // videoTotalRating
+    Object vtr = d.get("videoTotalRating");
+    if (vtr instanceof Integer) {
+      u.videoTotalRating = (Integer) vtr;
+    } else if (vtr instanceof Number) {
+      u.videoTotalRating = ((Number) vtr).intValue();
+    } else {
+      u.videoTotalRating = null;
+    }
+    
+    // videoRatingCount
+    Object vrc = d.get("videoRatingCount");
+    if (vrc instanceof Integer) {
+      u.videoRatingCount = (Integer) vrc;
+    } else if (vrc instanceof Number) {
+      u.videoRatingCount = ((Number) vrc).intValue();
+    } else {
+      u.videoRatingCount = null;
+    }
+    
+    // randomChatCount
+    Object rcc = d.get("randomChatCount");
+    if (rcc instanceof Integer) {
+      u.randomChatCount = (Integer) rcc;
+    } else if (rcc instanceof Number) {
+      u.randomChatCount = ((Number) rcc).intValue();
+    } else {
+      u.randomChatCount = null;
+    }
+    
+    // chatTotalRating
+    Object ctr = d.get("chatTotalRating");
+    if (ctr instanceof Integer) {
+      u.chatTotalRating = (Integer) ctr;
+    } else if (ctr instanceof Number) {
+      u.chatTotalRating = ((Number) ctr).intValue();
+    } else {
+      u.chatTotalRating = null;
+    }
+    
+    // chatRatingCount
+    Object crc = d.get("chatRatingCount");
+    if (crc instanceof Integer) {
+      u.chatRatingCount = (Integer) crc;
+    } else if (crc instanceof Number) {
+      u.chatRatingCount = ((Number) crc).intValue();
+    } else {
+      u.chatRatingCount = null;
     }
     
     return u;
