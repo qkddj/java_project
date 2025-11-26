@@ -422,15 +422,17 @@ public class RandomChatFrame extends JFrame {
             RatingDialog ratingDialog = new RatingDialog(this);
             int rating = ratingDialog.showRatingDialog();
             
-            if (rating > 0) {
-                // 평점 저장
+            // rating이 0이면 건너뛰기, 1-5면 평점 저장
+            // rating >= 0이면 모두 처리 (0점도 저장)
+            if (rating >= 0) {
+                // 평점 저장 (0점 포함)
                 try {
                     RatingService ratingService = new RatingService();
                     // partnerId는 Socket ID이거나 username일 수 있음
                     // 실제 username을 사용해야 함
                     // partnerUsername 사용
                     String ratedUsername = partnerUsername;
-                    System.out.println("평점 저장 시도: currentUser.username=" + currentUser.username + ", partnerUsername=" + partnerUsername);
+                    System.out.println("평점 저장 시도: currentUser.username=" + currentUser.username + ", partnerUsername=" + partnerUsername + ", rating=" + rating);
                     
                     if (ratedUsername == null || ratedUsername.isBlank() || ratedUsername.equals("anonymous") || ratedUsername.equals("unknown")) {
                         // partnerUsername이 없으면 경고 메시지와 함께 디버그 정보 출력
@@ -448,10 +450,13 @@ public class RandomChatFrame extends JFrame {
                     } else {
                         try {
                             ratingService.createRating(currentUser.username, ratedUsername, rating);
-                            JOptionPane.showMessageDialog(this, 
-                                "평점이 저장되었습니다. 감사합니다!", 
-                                "평점 제출 완료", 
-                                JOptionPane.INFORMATION_MESSAGE);
+                            if (rating > 0) {
+                                JOptionPane.showMessageDialog(this, 
+                                    "평점이 저장되었습니다. 감사합니다!", 
+                                    "평점 제출 완료", 
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            }
+                            // rating이 0이면 건너뛰기이므로 메시지 표시하지 않음
                         } catch (IllegalArgumentException e) {
                             JOptionPane.showMessageDialog(this, 
                                 "평점 저장 실패: " + e.getMessage(), 

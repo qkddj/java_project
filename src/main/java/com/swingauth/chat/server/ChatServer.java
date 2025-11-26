@@ -254,13 +254,51 @@ public class ChatServer {
         }
         
         try {
-            Mongo.users().updateOne(
-                Filters.eq("username", username),
-                new Document("$inc", new Document("chatCount", 1))
-            );
+            // 먼저 문서를 조회하여 필드 존재 여부 확인
+            Document userDoc = Mongo.users().find(Filters.eq("username", username)).first();
+            if (userDoc == null) {
+                System.err.println("사용자를 찾을 수 없습니다: " + username);
+                return;
+            }
+            
+            Document setDoc = new Document();
+            Document incDoc = new Document();
+            
+            // chatCount 필드가 없으면 기본값으로 설정, 있으면 증가
+            if (!userDoc.containsKey("chatCount")) {
+                setDoc.append("chatCount", 1);
+            } else {
+                incDoc.append("chatCount", 1);
+            }
+            
+            // 다른 통계 필드가 없으면 기본값 설정
+            if (!userDoc.containsKey("totalRatingReceived")) {
+                setDoc.append("totalRatingReceived", 0);
+            }
+            
+            if (!userDoc.containsKey("ratingCountReceived")) {
+                setDoc.append("ratingCountReceived", 0);
+            }
+            
+            // 업데이트 문서 생성
+            Document update = new Document();
+            if (!setDoc.isEmpty()) {
+                update.append("$set", setDoc);
+            }
+            if (!incDoc.isEmpty()) {
+                update.append("$inc", incDoc);
+            }
+            
+            if (!update.isEmpty()) {
+                Mongo.users().updateOne(
+                    Filters.eq("username", username),
+                    update
+                );
+            }
             System.out.println("채팅 횟수 증가: username=" + username);
         } catch (Exception e) {
             System.err.println("채팅 횟수 증가 실패: username=" + username + ", 오류=" + e.getMessage());
+            e.printStackTrace();
         }
     }
     

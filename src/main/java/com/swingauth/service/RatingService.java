@@ -64,8 +64,10 @@ public class RatingService {
         if (ratedUsername == null || ratedUsername.isBlank() || ratedUsername.equals("anonymous")) {
             throw new IllegalArgumentException("상대방 사용자 정보가 필요합니다. (현재 값: " + ratedUsername + ")");
         }
-        if (rating < 1 || rating > 5) {
-            throw new IllegalArgumentException("평점은 1-5 사이의 값이어야 합니다.");
+        // rating이 0이면 건너뛰기를 의미 (0점으로 저장)
+        // rating이 1-5 사이면 정상 평점
+        if (rating < 0 || rating > 5) {
+            throw new IllegalArgumentException("평점은 0(건너뛰기) 또는 1-5 사이의 값이어야 합니다.");
         }
 
         System.out.println("평점 저장 시도: raterUsername=" + raterUsername + ", ratedUsername=" + ratedUsername + ", rating=" + rating);
@@ -134,8 +136,13 @@ public class RatingService {
         // upsert를 사용하여 문서가 없으면 생성, 있으면 업데이트
         ratings.updateOne(filter, update, new UpdateOptions().upsert(true));
         
-        // 받은 사용자의 평점 통계 업데이트
-        updateUserRatingStats(ratedUsername, rating);
+        // 받은 사용자의 평점 통계 업데이트 (0점이 아닌 경우만)
+        // 0점은 건너뛰기를 의미하므로 통계에 포함하지 않음
+        if (rating > 0) {
+            updateUserRatingStats(ratedUsername, rating);
+        } else {
+            System.out.println("건너뛰기 선택: 평점 통계에 반영하지 않음 (rating=0)");
+        }
         
         // 채팅 횟수는 매칭 완료 시 증가하므로 여기서는 처리하지 않음
         
@@ -150,14 +157,49 @@ public class RatingService {
             return;
         }
         
-        // 받은 평점 합계 및 횟수 증가
-        users.updateOne(
-            Filters.eq("username", username),
-            new Document("$inc", new Document()
-                .append("totalRatingReceived", rating)
-                .append("ratingCountReceived", 1)
-            )
-        );
+        // 먼저 문서를 조회하여 필드 존재 여부 확인
+        Document userDoc = users.find(Filters.eq("username", username)).first();
+        if (userDoc == null) {
+            System.err.println("사용자를 찾을 수 없습니다: " + username);
+            return;
+        }
+        
+        Document setDoc = new Document();
+        Document incDoc = new Document();
+        
+        // 필드가 없으면 기본값으로 설정, 있으면 증가
+        if (!userDoc.containsKey("totalRatingReceived")) {
+            setDoc.append("totalRatingReceived", rating);
+        } else {
+            incDoc.append("totalRatingReceived", rating);
+        }
+        
+        if (!userDoc.containsKey("ratingCountReceived")) {
+            setDoc.append("ratingCountReceived", 1);
+        } else {
+            incDoc.append("ratingCountReceived", 1);
+        }
+        
+        // chatCount 필드가 없으면 기본값 설정
+        if (!userDoc.containsKey("chatCount")) {
+            setDoc.append("chatCount", 0);
+        }
+        
+        // 업데이트 문서 생성
+        Document update = new Document();
+        if (!setDoc.isEmpty()) {
+            update.append("$set", setDoc);
+        }
+        if (!incDoc.isEmpty()) {
+            update.append("$inc", incDoc);
+        }
+        
+        if (!update.isEmpty()) {
+            users.updateOne(
+                Filters.eq("username", username),
+                update
+            );
+        }
         
         System.out.println("사용자 평점 통계 업데이트: username=" + username + ", 받은 평점=" + rating);
     }
