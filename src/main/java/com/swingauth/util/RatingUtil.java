@@ -16,22 +16,14 @@ public class RatingUtil {
      */
     public static int resetUserAverageRating(String username) {
         try {
-            // username으로부터 ObjectId 조회
             var userDoc = Mongo.users().find(Filters.eq("username", username)).first();
-            if (userDoc == null) {
-                System.out.println("[평균 평점 초기화] 사용자를 찾을 수 없음: " + username);
-                return 0;
-            }
+            if (userDoc == null) return 0;
             
             Object id = userDoc.get("_id");
-            if (!(id instanceof ObjectId)) {
-                System.out.println("[평균 평점 초기화] 사용자 ID가 유효하지 않음: " + username);
-                return 0;
-            }
+            if (!(id instanceof ObjectId)) return 0;
             
             ObjectId userId = (ObjectId) id;
             
-            // serviceType이 "average"인 문서 삭제
             var result = Mongo.ratings().deleteMany(
                 Filters.and(
                     Filters.eq("userId", userId),
@@ -39,14 +31,10 @@ public class RatingUtil {
                 )
             );
             
-            System.out.println("[평균 평점 초기화] 사용자: " + username + " (userId: " + userId + ")");
-            System.out.println("  - 삭제된 문서 수: " + result.getDeletedCount());
-            
             return (int) result.getDeletedCount();
             
         } catch (Exception e) {
-            System.err.println("[평균 평점 초기화] 오류 발생: username=" + username + " - " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[오류] 평균 평점 초기화 실패: " + username);
             return 0;
         }
     }
@@ -58,22 +46,15 @@ public class RatingUtil {
      */
     public static int resetUserAverageRating(ObjectId userId) {
         try {
-            // serviceType이 "average"인 문서 삭제
             var result = Mongo.ratings().deleteMany(
                 Filters.and(
                     Filters.eq("userId", userId),
                     Filters.eq("serviceType", "average")
                 )
             );
-            
-            System.out.println("[평균 평점 초기화] userId: " + userId);
-            System.out.println("  - 삭제된 문서 수: " + result.getDeletedCount());
-            
             return (int) result.getDeletedCount();
-            
         } catch (Exception e) {
-            System.err.println("[평균 평점 초기화] 오류 발생: userId=" + userId + " - " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[오류] 평균 평점 초기화 실패: " + userId);
             return 0;
         }
     }
@@ -85,19 +66,12 @@ public class RatingUtil {
      */
     public static int resetAllAverageRatings() {
         try {
-            // serviceType이 "average"인 모든 문서 삭제
             var result = Mongo.ratings().deleteMany(
                 Filters.eq("serviceType", "average")
             );
-            
-            System.out.println("[평균 평점 초기화] 모든 평균 평점 삭제");
-            System.out.println("  - 삭제된 문서 수: " + result.getDeletedCount());
-            
             return (int) result.getDeletedCount();
-            
         } catch (Exception e) {
-            System.err.println("[평균 평점 초기화] 오류 발생: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[오류] 전체 평균 평점 초기화 실패");
             return 0;
         }
     }
@@ -110,18 +84,9 @@ public class RatingUtil {
     public static boolean deleteAverageRatingDocument(ObjectId documentId) {
         try {
             var result = Mongo.ratings().deleteOne(Filters.eq("_id", documentId));
-            
-            if (result.getDeletedCount() > 0) {
-                System.out.println("[평균 평점 문서 삭제] ✅ 성공 - 문서 ID: " + documentId);
-                return true;
-            } else {
-                System.out.println("[평균 평점 문서 삭제] ❌ 문서를 찾을 수 없음 - 문서 ID: " + documentId);
-                return false;
-            }
-            
+            return result.getDeletedCount() > 0;
         } catch (Exception e) {
-            System.err.println("[평균 평점 문서 삭제] 오류 발생: documentId=" + documentId + " - " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[오류] 평점 문서 삭제 실패: " + documentId);
             return false;
         }
     }
@@ -136,7 +101,6 @@ public class RatingUtil {
             ObjectId documentId = new ObjectId(documentIdStr);
             return deleteAverageRatingDocument(documentId);
         } catch (Exception e) {
-            System.err.println("[평균 평점 문서 삭제] 잘못된 문서 ID 형식: " + documentIdStr);
             return false;
         }
     }
@@ -148,25 +112,18 @@ public class RatingUtil {
      */
     public static boolean recalculateUserAverageRating(String username) {
         try {
-            // username으로부터 ObjectId 조회
             var userDoc = Mongo.users().find(Filters.eq("username", username)).first();
-            if (userDoc == null) {
-                System.out.println("[평균 평점 재계산] 사용자를 찾을 수 없음: " + username);
-                return false;
-            }
+            if (userDoc == null) return false;
             
             Object id = userDoc.get("_id");
-            if (!(id instanceof ObjectId)) {
-                System.out.println("[평균 평점 재계산] 사용자 ID가 유효하지 않음: " + username);
-                return false;
-            }
+            if (!(id instanceof ObjectId)) return false;
             
             ObjectId userId = (ObjectId) id;
             
             // 기존 평균 평점 삭제
             resetUserAverageRating(userId);
             
-            // 평점 재계산 (MatchSocket의 updateUserAverageRating 로직과 동일)
+            // 평점 재계산
             double sum = 0.0;
             int count = 0;
             
@@ -199,7 +156,6 @@ public class RatingUtil {
             
             double averageRating = count > 0 ? sum / count : 5.0;
             
-            // ratings 컬렉션에 평균 평점 저장/업데이트 (serviceType: "average")
             var filter = new org.bson.Document("userId", userId)
                 .append("serviceType", "average");
             
@@ -211,13 +167,10 @@ public class RatingUtil {
                 .append("$unset", new org.bson.Document("user1Id", "").append("user2Id", "")), 
                 new com.mongodb.client.model.UpdateOptions().upsert(true));
             
-            System.out.println("[평균 평점 재계산] 사용자: " + username + ", 평균: " + averageRating + " (" + count + "개 평점)");
-            
             return true;
             
         } catch (Exception e) {
-            System.err.println("[평균 평점 재계산] 오류 발생: username=" + username + " - " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[오류] 평균 평점 재계산 실패: " + username);
             return false;
         }
     }
@@ -516,14 +469,11 @@ public class RatingUtil {
             
         } catch (Exception e) {
             result.append("\n❌ 오류 발생: ").append(e.getMessage()).append("\n");
-            e.printStackTrace();
         }
         
         result.append("\n========================================\n");
         
-        String resultStr = result.toString();
-        System.out.println(resultStr);
-        return resultStr;
+        return result.toString();
     }
     
     /**
