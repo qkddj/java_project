@@ -1,6 +1,7 @@
 package com.swingauth.ui;
 
 import com.swingauth.config.ServerConfig;
+import com.swingauth.model.User;
 import io.socket.client.IO;
 import io.socket.client.Socket;
 
@@ -18,8 +19,11 @@ public class MatchingFrame extends JFrame {
     private boolean isMatching = false;
     private boolean chatFrameOpened = false; // 채팅 화면이 열렸는지 여부
     private Runnable onMatchedCallback;
+    private User user;
+    private String partnerUsername = null; // 매칭된 상대방 username
 
-    public MatchingFrame(Runnable onMatched) {
+    public MatchingFrame(User user, Runnable onMatched) {
+        this.user = user;
         this.onMatchedCallback = onMatched;
         setTitle("랜덤 채팅 매칭");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -88,6 +92,13 @@ public class MatchingFrame extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     statusLabel.setText("서버 연결됨");
                     System.out.println("Socket 연결됨: " + socket.id());
+                    // username 등록 (연결 직후 즉시 등록)
+                    if (user != null && user.username != null && !user.username.isBlank()) {
+                        socket.emit("registerUsername", user.username);
+                        System.out.println("Username 등록 전송: " + user.username + " (Socket ID: " + socket.id() + ")");
+                    } else {
+                        System.err.println("경고: username이 없어 등록할 수 없습니다. user=" + user);
+                    }
                 });
             });
 
@@ -136,6 +147,19 @@ public class MatchingFrame extends JFrame {
                     startButton.setEnabled(true);
                     endButton.setVisible(false);
                     endButton.setEnabled(false);
+                    
+                    // partnerUsername 저장
+                    try {
+                        if (args.length > 0 && args[0] instanceof String) {
+                            org.json.JSONObject data = new org.json.JSONObject(args[0].toString());
+                            partnerUsername = data.optString("partnerUsername", "unknown");
+                            System.out.println("MatchingFrame: matched 이벤트 수신 - partnerUsername=" + partnerUsername);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("MatchingFrame: matched 이벤트 파싱 오류:");
+                        e.printStackTrace();
+                        partnerUsername = "unknown";
+                    }
                     
                     // 채팅 화면으로 이동 (소켓 전달)
                     if (onMatchedCallback != null) {
@@ -195,6 +219,10 @@ public class MatchingFrame extends JFrame {
 
     public Socket getSocket() {
         return socket;
+    }
+    
+    public String getPartnerUsername() {
+        return partnerUsername;
     }
     
     private void closeWindow() {

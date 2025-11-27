@@ -9,7 +9,6 @@ import org.bson.Document;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.time.Instant;
-import java.util.Date;
 
 public class AuthService {
   private final MongoCollection<Document> users = Mongo.users();
@@ -61,7 +60,39 @@ public class AuthService {
       throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
     }
 
+    // 기존 사용자 계정에 통계 필드가 없으면 기본값으로 추가
+    ensureUserStatsFields(uname, found);
+
     return User.fromDoc(found);
+  }
+  
+  /**
+   * 사용자 계정에 통계 필드가 없으면 기본값으로 추가
+   */
+  private void ensureUserStatsFields(String username, Document userDoc) {
+    boolean needsUpdate = false;
+    Document updateFields = new Document();
+    
+    if (!userDoc.containsKey("totalRatingReceived")) {
+      updateFields.append("totalRatingReceived", 0);
+      needsUpdate = true;
+    }
+    if (!userDoc.containsKey("ratingCountReceived")) {
+      updateFields.append("ratingCountReceived", 0);
+      needsUpdate = true;
+    }
+    if (!userDoc.containsKey("chatCount")) {
+      updateFields.append("chatCount", 0);
+      needsUpdate = true;
+    }
+    
+    if (needsUpdate) {
+      users.updateOne(
+        Filters.eq("username", username),
+        new Document("$set", updateFields)
+      );
+      System.out.println("사용자 통계 필드 초기화: username=" + username);
+    }
   }
 
   private String normalize(String s) {

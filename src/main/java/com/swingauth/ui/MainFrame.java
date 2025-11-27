@@ -111,11 +111,12 @@ public class MainFrame extends JFrame {
 
     btnChat.addActionListener(e -> {
         MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
-        matchingFrameRef[0] = new MatchingFrame(() -> {
+        matchingFrameRef[0] = new MatchingFrame(user, () -> {
             // 매칭 완료 시 채팅 화면 열기 (소켓 전달)
             SwingUtilities.invokeLater(() -> {
                 Socket socket = matchingFrameRef[0].getSocket();
-                new RandomChatFrame(socket).setVisible(true);
+                String partnerUsername = matchingFrameRef[0].getPartnerUsername();
+                new RandomChatFrame(socket, user, partnerUsername).setVisible(true);
             });
         });
         matchingFrameRef[0].setVisible(true);

@@ -3,6 +3,10 @@ package com.swingauth.chat.server;
 import com.corundumstudio.socketio.*;
 import com.corundumstudio.socketio.listener.ConnectListener;
 import com.corundumstudio.socketio.listener.DisconnectListener;
+import com.mongodb.client.model.Filters;
+import com.swingauth.db.Mongo;
+import com.swingauth.service.RatingService;
+import org.bson.Document;
 import org.json.JSONObject;
 
 import java.net.InetAddress;
@@ -16,6 +20,8 @@ public class ChatServer {
     private final Queue<SocketIOClient> matchQueue = new LinkedList<>();
     private final Map<String, String> matchedPairs = new HashMap<>(); // clientId -> matchedClientId
     private final Map<String, SocketIOClient> clients = new HashMap<>();
+    private final Map<String, String> clientIdToUsername = new HashMap<>(); // clientId -> username
+    private final RatingService ratingService = new RatingService();
     private int port = 3001;
     private boolean isRunning = false;
 
@@ -67,9 +73,20 @@ public class ChatServer {
         server.addDisconnectListener(new DisconnectListener() {
             @Override
             public void onDisconnect(SocketIOClient client) {
-                System.out.println("클라이언트 연결 해제: " + client.getSessionId());
+                String clientId = client.getSessionId().toString();
+                System.out.println("클라이언트 연결 해제: " + clientId);
                 endMatching(client);
-                clients.remove(client.getSessionId().toString());
+                clients.remove(clientId);
+                clientIdToUsername.remove(clientId);
+            }
+        });
+
+        // username 등록
+        server.addEventListener("registerUsername", String.class, (client, username, ackSender) -> {
+            String clientId = client.getSessionId().toString();
+            if (username != null && !username.isBlank() && !username.equals("unknown")) {
+                clientIdToUsername.put(clientId, username);
+                System.out.println("Username 등록: clientId=" + clientId + ", username=" + username);
             }
         });
 
@@ -153,13 +170,43 @@ public class ChatServer {
             String user1Id = user1.getSessionId().toString();
             String user2Id = user2.getSessionId().toString();
 
+            // username 가져오기
+            String user1Username = clientIdToUsername.getOrDefault(user1Id, "unknown");
+            String user2Username = clientIdToUsername.getOrDefault(user2Id, "unknown");
+
+            // 블랙리스트 체크: 두 사용자 간 평균 평점이 2점 이하이면 매칭 불가
+            if (!user1Username.equals("unknown") && !user2Username.equals("unknown")) {
+                if (ratingService.isBlacklisted(user1Username, user2Username)) {
+                    System.out.println("블랙리스트로 인해 매칭 차단: " + user1Username + " <-> " + user2Username);
+                    // 대기열에 다시 추가하여 다른 사용자와 매칭 시도
+                    matchQueue.offer(user1);
+                    matchQueue.offer(user2);
+                    continue;
+                }
+            }
+
             matchedPairs.put(user1Id, user2Id);
             matchedPairs.put(user2Id, user1Id);
 
-            user1.sendEvent("matched", new JSONObject().put("partnerId", user2Id).toString());
-            user2.sendEvent("matched", new JSONObject().put("partnerId", user1Id).toString());
+            // 채팅 횟수 증가
+            if (!user1Username.equals("unknown") && !user2Username.equals("unknown")) {
+                incrementChatCount(user1Username);
+                incrementChatCount(user2Username);
+            }
 
-            System.out.println("매칭 완료: " + user1Id + " <-> " + user2Id);
+            // matched 이벤트에 partnerId (Socket ID)와 partnerUsername 전달
+            JSONObject user1Data = new JSONObject();
+            user1Data.put("partnerId", user2Id);
+            user1Data.put("partnerUsername", user2Username);
+            
+            JSONObject user2Data = new JSONObject();
+            user2Data.put("partnerId", user1Id);
+            user2Data.put("partnerUsername", user1Username);
+
+            user1.sendEvent("matched", user1Data.toString());
+            user2.sendEvent("matched", user2Data.toString());
+
+            System.out.println("매칭 완료: " + user1Id + " (" + user1Username + ") <-> " + user2Id + " (" + user2Username + ")");
         }
     }
 
@@ -196,6 +243,63 @@ public class ChatServer {
 
     public int getPort() {
         return port;
+    }
+    
+    /**
+     * 사용자의 채팅 횟수 증가
+     */
+    private void incrementChatCount(String username) {
+        if (username == null || username.isBlank() || username.equals("unknown")) {
+            return;
+        }
+        
+        try {
+            // 먼저 문서를 조회하여 필드 존재 여부 확인
+            Document userDoc = Mongo.users().find(Filters.eq("username", username)).first();
+            if (userDoc == null) {
+                System.err.println("사용자를 찾을 수 없습니다: " + username);
+                return;
+            }
+            
+            Document setDoc = new Document();
+            Document incDoc = new Document();
+            
+            // chatCount 필드가 없으면 기본값으로 설정, 있으면 증가
+            if (!userDoc.containsKey("chatCount")) {
+                setDoc.append("chatCount", 1);
+            } else {
+                incDoc.append("chatCount", 1);
+            }
+            
+            // 다른 통계 필드가 없으면 기본값 설정
+            if (!userDoc.containsKey("totalRatingReceived")) {
+                setDoc.append("totalRatingReceived", 0);
+            }
+            
+            if (!userDoc.containsKey("ratingCountReceived")) {
+                setDoc.append("ratingCountReceived", 0);
+            }
+            
+            // 업데이트 문서 생성
+            Document update = new Document();
+            if (!setDoc.isEmpty()) {
+                update.append("$set", setDoc);
+            }
+            if (!incDoc.isEmpty()) {
+                update.append("$inc", incDoc);
+            }
+            
+            if (!update.isEmpty()) {
+                Mongo.users().updateOne(
+                    Filters.eq("username", username),
+                    update
+                );
+            }
+            System.out.println("채팅 횟수 증가: username=" + username);
+        } catch (Exception e) {
+            System.err.println("채팅 횟수 증가 실패: username=" + username + ", 오류=" + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     /**
