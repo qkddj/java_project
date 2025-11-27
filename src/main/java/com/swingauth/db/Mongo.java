@@ -3,6 +3,7 @@ package com.swingauth.db;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoWriteException;
 import com.mongodb.client.*;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
 import org.bson.Document;
@@ -123,11 +124,35 @@ public class Mongo {
       ratings().dropIndex("uniq_sessionId");
     } catch (Exception ignored) {}
 
+    // 기존 인덱스 삭제 시도 (새로운 구조로 재생성하기 위해)
+    try {
+      ratings().dropIndex("uniq_user_pair_service");
+      System.out.println("[Mongo] 기존 uniq_user_pair_service 인덱스 삭제 완료");
+    } catch (Exception ignored) {}
+    
+    try {
+      ratings().dropIndex("uniq_user_service_average");
+      System.out.println("[Mongo] 기존 uniq_user_service_average 인덱스 삭제 완료");
+    } catch (Exception ignored) {}
+
     // 평점 인덱스: 유저 쌍과 서비스 타입으로 유니크 제약
+    // serviceType이 "average"가 아닌 문서에만 적용 (partial index)
     safeCreateIndex(
         ratings(),
         Indexes.ascending("user1Id", "user2Id", "serviceType"),
-        new IndexOptions().unique(true).name("uniq_user_pair_service")
+        new IndexOptions()
+            .unique(true)
+            .partialFilterExpression(Filters.ne("serviceType", "average"))
+            .name("uniq_user_pair_service")
+    );
+    // serviceType: "average" 문서용 인덱스 (userId + serviceType으로 유니크)
+    safeCreateIndex(
+        ratings(),
+        Indexes.ascending("userId", "serviceType"),
+        new IndexOptions()
+            .unique(true)
+            .partialFilterExpression(Filters.eq("serviceType", "average"))
+            .name("uniq_user_service_average")
     );
     safeCreateIndex(ratings(), Indexes.ascending("user1Id"),
         new IndexOptions().name("idx_user1Id"));
