@@ -363,7 +363,7 @@ public class RatingUtil {
                 }
             }
             
-            // ========== 두 유저 쌍의 평점 정보 (serviceType: "video" 문서) ==========
+            // ========== 두 유저 쌍의 평점 정보 (serviceType: "randomVideo" 문서) ==========
             if (user1Id != null && user2Id != null) {
                 result.append("\n[두 유저 쌍 평점 정보]\n");
                 
@@ -381,7 +381,7 @@ public class RatingUtil {
                     Filters.and(
                         Filters.eq("user1Id", sortedUser1Id),
                         Filters.eq("user2Id", sortedUser2Id),
-                        Filters.eq("serviceType", "video")
+                        Filters.eq("serviceType", "randomVideo")
                     )
                 ).first();
                 

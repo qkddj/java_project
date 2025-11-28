@@ -134,7 +134,7 @@ public class RatingService {
      * 사용자가 받은 평점 통계 업데이트
      * @param userId 평점을 받은 사용자의 ObjectId
      * @param rating 받은 평점
-     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
+     * @param serviceType 서비스 타입 ("randomVideo" 또는 "randomChat")
      */
     private void updateUserRatingStats(ObjectId userId, int rating, String serviceType) {
         try {
@@ -143,7 +143,7 @@ public class RatingService {
             // 서비스별 평점 합계 업데이트
             if ("randomChat".equals(serviceType)) {
                 incDoc.append("chatTotalRating", rating);
-            } else if ("video".equals(serviceType)) {
+            } else if ("randomVideo".equals(serviceType)) {
                 incDoc.append("videoTotalRating", rating);
             }
             

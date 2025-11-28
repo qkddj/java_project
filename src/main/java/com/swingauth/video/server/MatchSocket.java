@@ -182,7 +182,7 @@ public class MatchSocket implements WebSocketListener {
             
             String partnerUsername = json.optString("partnerUsername");
             int rating = json.optInt("rating");
-            String serviceType = json.optString("serviceType", "video");
+            String serviceType = json.optString("serviceType", "randomVideo");
             
             if (currentUsername == null || currentUsername.isEmpty() || "unknown".equals(currentUsername) 
                     || partnerUsername == null || partnerUsername.isEmpty() || "unknown".equals(partnerUsername) 
@@ -242,6 +242,8 @@ public class MatchSocket implements WebSocketListener {
                 newDoc.put("user1Id", user1Id);
                 newDoc.put("user2Id", user2Id);
                 newDoc.append("serviceType", serviceType);
+                newDoc.append("createdAt", new java.util.Date());
+                newDoc.append("updatedAt", new java.util.Date());
                 if (isUser1) {
                     newDoc.append("user1Rating", rating);
                     newDoc.append("user2Rating", null);
@@ -272,6 +274,7 @@ public class MatchSocket implements WebSocketListener {
                 }
                 
                 Document setDoc = new Document();
+                setDoc.append("updatedAt", new java.util.Date());
                 if (isUser1) {
                     setDoc.append("user1Rating", rating);
                 } else {
@@ -391,7 +394,7 @@ public class MatchSocket implements WebSocketListener {
      * @param userId 유저 ObjectId
      * @param newRating 새 평점 값
      * @param oldRating 기존 평점 값 (null이면 새 평점)
-     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
+     * @param serviceType 서비스 타입 ("randomVideo" 또는 "randomChat")
      */
     private void updateUserRatingStats(ObjectId userId, int newRating, Integer oldRating, String serviceType) {
         try {
@@ -400,7 +403,7 @@ public class MatchSocket implements WebSocketListener {
             
             if (isNew) {
                 // 새 평점: 서비스별 평점 합계 업데이트
-                if ("video".equals(serviceType)) {
+                if ("randomVideo".equals(serviceType)) {
                     incDoc.append("videoTotalRating", newRating);
                 } else if ("randomChat".equals(serviceType)) {
                     incDoc.append("chatTotalRating", newRating);
@@ -410,7 +413,7 @@ public class MatchSocket implements WebSocketListener {
                 int diff = newRating - oldRating;
                 if (diff != 0) {
                     // 서비스별 평점 합계 업데이트
-                    if ("video".equals(serviceType)) {
+                    if ("randomVideo".equals(serviceType)) {
                         incDoc.append("videoTotalRating", diff);
                     } else if ("randomChat".equals(serviceType)) {
                         incDoc.append("chatTotalRating", diff);
