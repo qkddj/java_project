@@ -73,16 +73,23 @@ public class AuthService {
     boolean needsUpdate = false;
     Document updateFields = new Document();
     
-    if (!userDoc.containsKey("totalRatingReceived")) {
-      updateFields.append("totalRatingReceived", 0);
+    // 영상통화 통계 필드
+    if (!userDoc.containsKey("videoCallCount")) {
+      updateFields.append("videoCallCount", 0);
       needsUpdate = true;
     }
-    if (!userDoc.containsKey("ratingCountReceived")) {
-      updateFields.append("ratingCountReceived", 0);
+    if (!userDoc.containsKey("videoTotalRating")) {
+      updateFields.append("videoTotalRating", 0);
       needsUpdate = true;
     }
-    if (!userDoc.containsKey("chatCount")) {
-      updateFields.append("chatCount", 0);
+    
+    // 랜덤채팅 통계 필드
+    if (!userDoc.containsKey("randomChatCount")) {
+      updateFields.append("randomChatCount", 0);
+      needsUpdate = true;
+    }
+    if (!userDoc.containsKey("chatTotalRating")) {
+      updateFields.append("chatTotalRating", 0);
       needsUpdate = true;
     }
     

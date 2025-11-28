@@ -338,53 +338,6 @@ public class MatchSocket implements WebSocketListener {
     }
 
     /**
-     * 유저의 평점 통계(합계, 횟수)를 업데이트합니다.
-     * @param userId 유저 ObjectId
-     * @param newRating 새 평점 값
-     * @param oldRating 기존 평점 값 (null이면 새 평점)
-     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
-     */
-    private void updateUserRatingStats(ObjectId userId, int newRating, Integer oldRating, String serviceType) {
-        try {
-            Document incDoc = new Document();
-            boolean isNew = (oldRating == null);
-            
-            if (isNew) {
-                // 새 평점: 합계에 새 평점 추가, 횟수 +1
-                incDoc.append("totalRatingReceived", newRating);
-                incDoc.append("ratingCount", 1);
-                
-                if ("video".equals(serviceType)) {
-                    incDoc.append("videoTotalRating", newRating);
-                    incDoc.append("videoRatingCount", 1);
-                } else if ("randomChat".equals(serviceType)) {
-                    incDoc.append("chatTotalRating", newRating);
-                    incDoc.append("chatRatingCount", 1);
-                }
-            } else {
-                // 평점 변경: 기존 평점 빼고 새 평점 더하기 (차이값)
-                int diff = newRating - oldRating;
-                if (diff != 0) {
-                    incDoc.append("totalRatingReceived", diff);
-                    
-                    if ("video".equals(serviceType)) {
-                        incDoc.append("videoTotalRating", diff);
-                    } else if ("randomChat".equals(serviceType)) {
-                        incDoc.append("chatTotalRating", diff);
-                    }
-                }
-            }
-            
-            if (!incDoc.isEmpty()) {
-                Document update = new Document("$inc", incDoc);
-                Mongo.users().updateOne(Filters.eq("_id", userId), update);
-            }
-        } catch (Exception e) {
-            System.err.println("[오류] 유저 평점 통계 업데이트 실패: " + e.getMessage());
-        }
-    }
-
-    /**
      * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 averageRating 필드에 저장합니다.
      * @param user1Id 첫 번째 유저 ObjectId
      * @param user2Id 두 번째 유저 ObjectId
@@ -430,6 +383,48 @@ public class MatchSocket implements WebSocketListener {
             
         } catch (Exception e) {
             System.err.println("[오류] 유저 쌍 평균 평점 업데이트 실패: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 유저의 평점 합계를 업데이트합니다.
+     * @param userId 유저 ObjectId
+     * @param newRating 새 평점 값
+     * @param oldRating 기존 평점 값 (null이면 새 평점)
+     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
+     */
+    private void updateUserRatingStats(ObjectId userId, int newRating, Integer oldRating, String serviceType) {
+        try {
+            Document incDoc = new Document();
+            boolean isNew = (oldRating == null);
+            
+            if (isNew) {
+                // 새 평점: 서비스별 평점 합계 업데이트
+                if ("video".equals(serviceType)) {
+                    incDoc.append("videoTotalRating", newRating);
+                } else if ("randomChat".equals(serviceType)) {
+                    incDoc.append("chatTotalRating", newRating);
+                }
+            } else {
+                // 평점 변경: 기존 평점 빼고 새 평점 더하기 (차이값)
+                int diff = newRating - oldRating;
+                if (diff != 0) {
+                    // 서비스별 평점 합계 업데이트
+                    if ("video".equals(serviceType)) {
+                        incDoc.append("videoTotalRating", diff);
+                    } else if ("randomChat".equals(serviceType)) {
+                        incDoc.append("chatTotalRating", diff);
+                    }
+                }
+            }
+            
+            if (!incDoc.isEmpty()) {
+                Document update = new Document("$inc", incDoc);
+                Mongo.users().updateOne(Filters.eq("_id", userId), update);
+                System.out.println("[영상통화] 사용자 평점 통계 업데이트: userId=" + userId + ", 받은 평점=" + newRating);
+            }
+        } catch (Exception e) {
+            System.err.println("[오류] 유저 평점 통계 업데이트 실패: " + e.getMessage());
         }
     }
 }

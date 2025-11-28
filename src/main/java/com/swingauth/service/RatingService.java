@@ -112,23 +112,6 @@ public class RatingService {
                 .append("updatedAt", new Date()));
         }
         
-        // 평균 계산을 위해 기존 문서를 먼저 조회
-        Document existing = ratings.find(filter).first();
-        if (existing != null) {
-            Integer user1Rating = existing.getInteger("user1Rating");
-            Integer user2Rating = existing.getInteger("user2Rating");
-            
-            // 업데이트 후 평점 값 계산
-            int finalUser1Rating = isRaterUser1 ? rating : (user1Rating != null ? user1Rating : 0);
-            int finalUser2Rating = isRaterUser1 ? (user2Rating != null ? user2Rating : 0) : rating;
-            
-            // 두 평점이 모두 있으면 평균 계산
-            if (finalUser1Rating > 0 && finalUser2Rating > 0) {
-                double averageRating = (finalUser1Rating + finalUser2Rating) / 2.0;
-                update.get("$set", Document.class).append("averageRating", Math.round(averageRating * 10.0) / 10.0);
-            }
-        }
-        
         // 새 문서 생성 시 필요한 필드
         update.append("$setOnInsert", new Document()
             .append("createdAt", new Date()));
@@ -136,72 +119,90 @@ public class RatingService {
         // upsert를 사용하여 문서가 없으면 생성, 있으면 업데이트
         ratings.updateOne(filter, update, new UpdateOptions().upsert(true));
         
-        // 받은 사용자의 평점 통계 업데이트 (0점이 아닌 경우만)
-        // 0점은 건너뛰기를 의미하므로 통계에 포함하지 않음
-        if (rating > 0) {
-            updateUserRatingStats(ratedUsername, rating);
-        } else {
-            System.out.println("건너뛰기 선택: 평점 통계에 반영하지 않음 (rating=0)");
-        }
+        // 두 유저 쌍의 평균 평점 계산 및 저장 (영상통화와 동일한 형식)
+        updatePairAverageRating(user1Id, user2Id, "randomChat");
         
-        // 채팅 횟수는 매칭 완료 시 증가하므로 여기서는 처리하지 않음
+        // 평점을 받은 사용자의 통계 업데이트 (0점이 아닌 경우만)
+        if (rating > 0) {
+            updateUserRatingStats(ratedId, rating, "randomChat");
+        }
         
         return true;
     }
     
     /**
      * 사용자가 받은 평점 통계 업데이트
+     * @param userId 평점을 받은 사용자의 ObjectId
+     * @param rating 받은 평점
+     * @param serviceType 서비스 타입 ("video" 또는 "randomChat")
      */
-    private void updateUserRatingStats(String username, int rating) {
-        if (username == null || username.isBlank()) {
-            return;
+    private void updateUserRatingStats(ObjectId userId, int rating, String serviceType) {
+        try {
+            Document incDoc = new Document();
+            
+            // 서비스별 평점 합계 업데이트
+            if ("randomChat".equals(serviceType)) {
+                incDoc.append("chatTotalRating", rating);
+            } else if ("video".equals(serviceType)) {
+                incDoc.append("videoTotalRating", rating);
+            }
+            
+            Document update = new Document("$inc", incDoc);
+            users.updateOne(Filters.eq("_id", userId), update);
+            
+            System.out.println("[랜덤채팅] 사용자 평점 통계 업데이트: userId=" + userId + ", 받은 평점=" + rating);
+        } catch (Exception e) {
+            System.err.println("[오류] 사용자 평점 통계 업데이트 실패: " + e.getMessage());
         }
-        
-        // 먼저 문서를 조회하여 필드 존재 여부 확인
-        Document userDoc = users.find(Filters.eq("username", username)).first();
-        if (userDoc == null) {
-            System.err.println("사용자를 찾을 수 없습니다: " + username);
-            return;
+    }
+    
+    /**
+     * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 averageRating 필드에 저장
+     * (영상통화와 동일한 형식)
+     */
+    private void updatePairAverageRating(ObjectId user1Id, ObjectId user2Id, String serviceType) {
+        try {
+            Document filter = new Document("user1Id", user1Id)
+                .append("user2Id", user2Id)
+                .append("serviceType", serviceType);
+            
+            Document ratingDoc = ratings.find(filter).first();
+            if (ratingDoc == null) return;
+            
+            Object user1RatingObj = ratingDoc.get("user1Rating");
+            Object user2RatingObj = ratingDoc.get("user2Rating");
+            
+            double user1Rating = 0.0;
+            double user2Rating = 0.0;
+            int count = 0;
+            
+            if (user1RatingObj != null && user1RatingObj instanceof Number) {
+                user1Rating = ((Number) user1RatingObj).doubleValue();
+                if (user1Rating > 0) count++;
+            }
+            
+            if (user2RatingObj != null && user2RatingObj instanceof Number) {
+                user2Rating = ((Number) user2RatingObj).doubleValue();
+                if (user2Rating > 0) count++;
+            }
+            
+            double pairAverage;
+            if (count == 0) {
+                pairAverage = 5.0; // 기본값
+            } else if (count == 1) {
+                // 한 쪽만 평점을 준 경우 그 평점을 사용
+                pairAverage = user1Rating > 0 ? user1Rating : user2Rating;
+            } else {
+                // 둘 다 평점을 준 경우 평균
+                pairAverage = (user1Rating + user2Rating) / 2.0;
+            }
+            
+            Document update = new Document("$set", new Document("averageRating", Math.round(pairAverage * 10.0) / 10.0));
+            ratings.updateOne(filter, update);
+            
+        } catch (Exception e) {
+            System.err.println("[오류] 유저 쌍 평균 평점 업데이트 실패: " + e.getMessage());
         }
-        
-        Document setDoc = new Document();
-        Document incDoc = new Document();
-        
-        // 필드가 없으면 기본값으로 설정, 있으면 증가
-        if (!userDoc.containsKey("totalRatingReceived")) {
-            setDoc.append("totalRatingReceived", rating);
-        } else {
-            incDoc.append("totalRatingReceived", rating);
-        }
-        
-        if (!userDoc.containsKey("ratingCountReceived")) {
-            setDoc.append("ratingCountReceived", 1);
-        } else {
-            incDoc.append("ratingCountReceived", 1);
-        }
-        
-        // chatCount 필드가 없으면 기본값 설정
-        if (!userDoc.containsKey("chatCount")) {
-            setDoc.append("chatCount", 0);
-        }
-        
-        // 업데이트 문서 생성
-        Document update = new Document();
-        if (!setDoc.isEmpty()) {
-            update.append("$set", setDoc);
-        }
-        if (!incDoc.isEmpty()) {
-            update.append("$inc", incDoc);
-        }
-        
-        if (!update.isEmpty()) {
-            users.updateOne(
-                Filters.eq("username", username),
-                update
-            );
-        }
-        
-        System.out.println("사용자 평점 통계 업데이트: username=" + username + ", 받은 평점=" + rating);
     }
     
     /**
