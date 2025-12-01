@@ -224,9 +224,6 @@ public class MatchSocket implements WebSocketListener {
             ObjectId user1Id = sorted[0];
             ObjectId user2Id = sorted[1];
             
-            // 현재 유저가 user1Id인지 확인
-            boolean isUser1 = currentUserId.equals(user1Id);
-            
             // 필터: ObjectId 타입으로 검색
             Document filter = new Document("user1Id", user1Id)
                 .append("user2Id", user2Id)
@@ -237,58 +234,38 @@ public class MatchSocket implements WebSocketListener {
             boolean isNewDocument = (existingDoc == null);
             
             if (isNewDocument) {
-                // 새 문서 생성: 첫 번째 만남이거나 아직 평점이 없는 경우
-                Document newDoc = new Document();
-                newDoc.put("user1Id", user1Id);
-                newDoc.put("user2Id", user2Id);
-                newDoc.append("serviceType", serviceType);
-                newDoc.append("createdAt", new java.util.Date());
-                newDoc.append("updatedAt", new java.util.Date());
-                if (isUser1) {
-                    newDoc.append("user1Rating", rating);
-                    newDoc.append("user2Rating", null);
-                } else {
-                    newDoc.append("user1Rating", null);
-                    newDoc.append("user2Rating", rating);
-                }
+                // 새 문서 생성: 첫 번째 평점이 평균이 됨
+                Document newDoc = new Document()
+                    .append("user1Id", user1Id)
+                    .append("user2Id", user2Id)
+                    .append("serviceType", serviceType)
+                    .append("createdAt", new java.util.Date())
+                    .append("updatedAt", new java.util.Date())
+                    .append("averageRating", (double) rating);
                 
                 Mongo.ratings().insertOne(newDoc);
                 
-                // 두 유저 쌍의 평균 평점 계산 및 저장
-                updatePairAverageRating(user1Id, user2Id, serviceType);
-                
-                // 피평가자(partnerUser)의 평점 합계와 횟수 업데이트 (새 평점)
-                updateUserRatingStats(partnerUserId, rating, null, serviceType);
+                // 피평가자(partnerUser)의 평점 합계 업데이트
+                updateUserRatingStats(partnerUserId, rating, serviceType);
                 
                 return true;
             } else {
-                // 기존 문서 업데이트: 같은 유저 쌍이 다시 만난 경우, 기존 평점을 새 점수로 변경
-                // 기존 평점 가져오기
-                Integer oldRating = null;
-                if (isUser1) {
-                    Object oldVal = existingDoc.get("user1Rating");
-                    if (oldVal instanceof Number) oldRating = ((Number) oldVal).intValue();
-                } else {
-                    Object oldVal = existingDoc.get("user2Rating");
-                    if (oldVal instanceof Number) oldRating = ((Number) oldVal).intValue();
+                // 기존 문서 업데이트: 기존 평균과 새 평점의 평균 계산
+                double oldAverage = 5.0;
+                Object avgObj = existingDoc.get("averageRating");
+                if (avgObj instanceof Number) {
+                    oldAverage = ((Number) avgObj).doubleValue();
                 }
+                double newAverage = Math.round(((oldAverage + rating) / 2.0) * 10.0) / 10.0;
                 
-                Document setDoc = new Document();
-                setDoc.append("updatedAt", new java.util.Date());
-                if (isUser1) {
-                    setDoc.append("user1Rating", rating);
-                } else {
-                    setDoc.append("user2Rating", rating);
-                }
-                Document update = new Document("$set", setDoc);
+                Document update = new Document("$set", new Document()
+                    .append("updatedAt", new java.util.Date())
+                    .append("averageRating", newAverage));
                 
                 Mongo.ratings().updateOne(filter, update);
                 
-                // 두 유저 쌍의 평균 평점 계산 및 저장
-                updatePairAverageRating(user1Id, user2Id, serviceType);
-                
-                // 피평가자(partnerUser)의 평점 통계 업데이트
-                updateUserRatingStats(partnerUserId, rating, oldRating, serviceType);
+                // 피평가자(partnerUser)의 평점 합계 업데이트
+                updateUserRatingStats(partnerUserId, rating, serviceType);
                 
                 return true;
             }
@@ -341,90 +318,26 @@ public class MatchSocket implements WebSocketListener {
     }
 
     /**
-     * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 averageRating 필드에 저장합니다.
-     * @param user1Id 첫 번째 유저 ObjectId
-     * @param user2Id 두 번째 유저 ObjectId
-     * @param serviceType 서비스 타입
-     */
-    private void updatePairAverageRating(ObjectId user1Id, ObjectId user2Id, String serviceType) {
-        try {
-            Document filter = new Document("user1Id", user1Id)
-                .append("user2Id", user2Id)
-                .append("serviceType", serviceType);
-            
-            Document ratingDoc = Mongo.ratings().find(filter).first();
-            if (ratingDoc == null) return;
-            
-            Object user1RatingObj = ratingDoc.get("user1Rating");
-            Object user2RatingObj = ratingDoc.get("user2Rating");
-            
-            double user1Rating = 0.0;
-            double user2Rating = 0.0;
-            int count = 0;
-            
-            if (user1RatingObj != null && user1RatingObj instanceof Number) {
-                user1Rating = ((Number) user1RatingObj).doubleValue();
-                count++;
-            }
-            
-            if (user2RatingObj != null && user2RatingObj instanceof Number) {
-                user2Rating = ((Number) user2RatingObj).doubleValue();
-                count++;
-            }
-            
-            double pairAverage;
-            if (count == 0) {
-                pairAverage = 5.0;
-            } else if (count == 1) {
-                pairAverage = (user1RatingObj != null && user1RatingObj instanceof Number) ? user1Rating : user2Rating;
-            } else {
-                pairAverage = (user1Rating + user2Rating) / 2.0;
-            }
-            
-            Document update = new Document("$set", new Document("averageRating", pairAverage));
-            Mongo.ratings().updateOne(filter, update);
-            
-        } catch (Exception e) {
-            System.err.println("[오류] 유저 쌍 평균 평점 업데이트 실패: " + e.getMessage());
-        }
-    }
-
-    /**
      * 유저의 평점 합계를 업데이트합니다.
      * @param userId 유저 ObjectId
-     * @param newRating 새 평점 값
-     * @param oldRating 기존 평점 값 (null이면 새 평점)
+     * @param rating 평점 값
      * @param serviceType 서비스 타입 ("randomVideo" 또는 "randomChat")
      */
-    private void updateUserRatingStats(ObjectId userId, int newRating, Integer oldRating, String serviceType) {
+    private void updateUserRatingStats(ObjectId userId, int rating, String serviceType) {
         try {
             Document incDoc = new Document();
-            boolean isNew = (oldRating == null);
             
-            if (isNew) {
-                // 새 평점: 서비스별 평점 합계 업데이트
-                if ("randomVideo".equals(serviceType)) {
-                    incDoc.append("videoTotalRating", newRating);
-                } else if ("randomChat".equals(serviceType)) {
-                    incDoc.append("chatTotalRating", newRating);
-                }
-            } else {
-                // 평점 변경: 기존 평점 빼고 새 평점 더하기 (차이값)
-                int diff = newRating - oldRating;
-                if (diff != 0) {
-                    // 서비스별 평점 합계 업데이트
-                    if ("randomVideo".equals(serviceType)) {
-                        incDoc.append("videoTotalRating", diff);
-                    } else if ("randomChat".equals(serviceType)) {
-                        incDoc.append("chatTotalRating", diff);
-                    }
-                }
+            // 서비스별 평점 합계 업데이트
+            if ("randomVideo".equals(serviceType)) {
+                incDoc.append("videoTotalRating", rating);
+            } else if ("randomChat".equals(serviceType)) {
+                incDoc.append("chatTotalRating", rating);
             }
             
             if (!incDoc.isEmpty()) {
                 Document update = new Document("$inc", incDoc);
                 Mongo.users().updateOne(Filters.eq("_id", userId), update);
-                System.out.println("[영상통화] 사용자 평점 통계 업데이트: userId=" + userId + ", 받은 평점=" + newRating);
+                System.out.println("[영상통화] 사용자 평점 통계 업데이트: userId=" + userId + ", 받은 평점=" + rating);
             }
         } catch (Exception e) {
             System.err.println("[오류] 유저 평점 통계 업데이트 실패: " + e.getMessage());

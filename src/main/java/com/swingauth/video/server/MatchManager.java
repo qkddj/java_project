@@ -354,7 +354,7 @@ public class MatchManager {
             
             org.bson.types.ObjectId userId = (org.bson.types.ObjectId) id;
             
-            // 해당 사용자가 받은 모든 평점을 실시간으로 계산
+            // 해당 사용자가 참여한 모든 유저 쌍의 averageRating을 합산
             double sum = 0.0;
             int count = 0;
             
@@ -364,22 +364,10 @@ public class MatchManager {
                     Filters.eq("user2Id", userId)
                 )
             )) {
-                org.bson.types.ObjectId docUser1Id = doc.get("user1Id", org.bson.types.ObjectId.class);
-                org.bson.types.ObjectId docUser2Id = doc.get("user2Id", org.bson.types.ObjectId.class);
-                
-                // 해당 사용자가 받은 평점만 추출
-                if (docUser1Id != null && docUser1Id.equals(userId)) {
-                    Object user1Rating = doc.get("user1Rating");
-                    if (user1Rating != null && user1Rating instanceof Number) {
-                        sum += ((Number) user1Rating).doubleValue();
-                        count++;
-                    }
-                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
-                    Object user2Rating = doc.get("user2Rating");
-                    if (user2Rating != null && user2Rating instanceof Number) {
-                        sum += ((Number) user2Rating).doubleValue();
-                        count++;
-                    }
+                Object avgRating = doc.get("averageRating");
+                if (avgRating != null && avgRating instanceof Number) {
+                    sum += ((Number) avgRating).doubleValue();
+                    count++;
                 }
             }
             

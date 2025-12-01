@@ -2,7 +2,6 @@ package com.swingauth.service;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.UpdateOptions;
 import com.swingauth.db.Mongo;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -91,36 +90,39 @@ public class RatingService {
         ObjectId[] sorted = sortObjectIds(raterId, ratedId);
         ObjectId user1Id = sorted[0];
         ObjectId user2Id = sorted[1];
-        
-        // 현재 평점을 주는 사용자가 user1Id인지 확인
-        boolean isRaterUser1 = raterId.equals(user1Id);
 
-        // 정렬된 user1Id, user2Id로 문서 찾기 (항상 같은 순서로 저장되므로 간단하게 찾을 수 있음)
+        // 정렬된 user1Id, user2Id로 문서 찾기
         Document filter = new Document("user1Id", user1Id)
             .append("user2Id", user2Id)
             .append("serviceType", "randomChat");
         
-        // 업데이트 문서 생성
-        Document update = new Document();
-        if (isRaterUser1) {
-            // 현재 평점을 주는 사용자가 user1Id
-            update.append("$set", new Document("user1Rating", rating)
-                .append("updatedAt", new Date()));
+        // 기존 문서 확인
+        Document existingDoc = ratings.find(filter).first();
+        
+        if (existingDoc == null) {
+            // 새 문서 생성: 첫 번째 평점이 평균이 됨
+            Document newDoc = new Document()
+                .append("user1Id", user1Id)
+                .append("user2Id", user2Id)
+                .append("serviceType", "randomChat")
+                .append("createdAt", new Date())
+                .append("updatedAt", new Date())
+                .append("averageRating", (double) rating);
+            ratings.insertOne(newDoc);
         } else {
-            // 현재 평점을 주는 사용자가 user2Id
-            update.append("$set", new Document("user2Rating", rating)
-                .append("updatedAt", new Date()));
+            // 기존 문서 업데이트: 기존 평균과 새 평점의 평균 계산
+            double oldAverage = 5.0;
+            Object avgObj = existingDoc.get("averageRating");
+            if (avgObj instanceof Number) {
+                oldAverage = ((Number) avgObj).doubleValue();
+            }
+            double newAverage = Math.round(((oldAverage + rating) / 2.0) * 10.0) / 10.0;
+            
+            Document update = new Document("$set", new Document()
+                .append("updatedAt", new Date())
+                .append("averageRating", newAverage));
+            ratings.updateOne(filter, update);
         }
-        
-        // 새 문서 생성 시 필요한 필드
-        update.append("$setOnInsert", new Document()
-            .append("createdAt", new Date()));
-        
-        // upsert를 사용하여 문서가 없으면 생성, 있으면 업데이트
-        ratings.updateOne(filter, update, new UpdateOptions().upsert(true));
-        
-        // 두 유저 쌍의 평균 평점 계산 및 저장 (영상통화와 동일한 형식)
-        updatePairAverageRating(user1Id, user2Id, "randomChat");
         
         // 평점을 받은 사용자의 통계 업데이트 (0점이 아닌 경우만)
         if (rating > 0) {
@@ -156,54 +158,6 @@ public class RatingService {
         }
     }
     
-    /**
-     * 두 유저 쌍의 평균 평점을 계산하고 해당 문서의 averageRating 필드에 저장
-     * (영상통화와 동일한 형식)
-     */
-    private void updatePairAverageRating(ObjectId user1Id, ObjectId user2Id, String serviceType) {
-        try {
-            Document filter = new Document("user1Id", user1Id)
-                .append("user2Id", user2Id)
-                .append("serviceType", serviceType);
-            
-            Document ratingDoc = ratings.find(filter).first();
-            if (ratingDoc == null) return;
-            
-            Object user1RatingObj = ratingDoc.get("user1Rating");
-            Object user2RatingObj = ratingDoc.get("user2Rating");
-            
-            double user1Rating = 0.0;
-            double user2Rating = 0.0;
-            int count = 0;
-            
-            if (user1RatingObj != null && user1RatingObj instanceof Number) {
-                user1Rating = ((Number) user1RatingObj).doubleValue();
-                if (user1Rating > 0) count++;
-            }
-            
-            if (user2RatingObj != null && user2RatingObj instanceof Number) {
-                user2Rating = ((Number) user2RatingObj).doubleValue();
-                if (user2Rating > 0) count++;
-            }
-            
-            double pairAverage;
-            if (count == 0) {
-                pairAverage = 5.0; // 기본값
-            } else if (count == 1) {
-                // 한 쪽만 평점을 준 경우 그 평점을 사용
-                pairAverage = user1Rating > 0 ? user1Rating : user2Rating;
-            } else {
-                // 둘 다 평점을 준 경우 평균
-                pairAverage = (user1Rating + user2Rating) / 2.0;
-            }
-            
-            Document update = new Document("$set", new Document("averageRating", Math.round(pairAverage * 10.0) / 10.0));
-            ratings.updateOne(filter, update);
-            
-        } catch (Exception e) {
-            System.err.println("[오류] 유저 쌍 평균 평점 업데이트 실패: " + e.getMessage());
-        }
-    }
     
     /**
      * 두 사용자 간 평균 평점이 2점 이하인지 확인 (블랙리스트 체크)

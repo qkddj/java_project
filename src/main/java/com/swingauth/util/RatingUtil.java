@@ -24,7 +24,7 @@ public class RatingUtil {
             
             ObjectId userId = (ObjectId) id;
             
-            // 해당 사용자가 받은 모든 평점을 실시간으로 계산
+            // 해당 사용자가 참여한 모든 유저 쌍의 averageRating을 합산
             double sum = 0.0;
             int count = 0;
             
@@ -34,21 +34,10 @@ public class RatingUtil {
                     Filters.eq("user2Id", userId)
                 )
             )) {
-                ObjectId docUser1Id = doc.get("user1Id", ObjectId.class);
-                ObjectId docUser2Id = doc.get("user2Id", ObjectId.class);
-                
-                if (docUser1Id != null && docUser1Id.equals(userId)) {
-                    Object user1Rating = doc.get("user1Rating");
-                    if (user1Rating != null && user1Rating instanceof Number) {
-                        sum += ((Number) user1Rating).doubleValue();
-                        count++;
-                    }
-                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
-                    Object user2Rating = doc.get("user2Rating");
-                    if (user2Rating != null && user2Rating instanceof Number) {
-                        sum += ((Number) user2Rating).doubleValue();
-                        count++;
-                    }
+                Object avgRating = doc.get("averageRating");
+                if (avgRating != null && avgRating instanceof Number) {
+                    sum += ((Number) avgRating).doubleValue();
+                    count++;
                 }
             }
             
@@ -172,7 +161,7 @@ public class RatingUtil {
             // 기존 평균 평점 삭제
             resetUserAverageRating(userId);
             
-            // 평점 재계산
+            // 평점 재계산 (averageRating 필드 사용)
             double sum = 0.0;
             int count = 0;
             
@@ -185,21 +174,10 @@ public class RatingUtil {
                     Filters.ne("serviceType", "average")
                 )
             )) {
-                ObjectId docUser1Id = doc.get("user1Id", ObjectId.class);
-                ObjectId docUser2Id = doc.get("user2Id", ObjectId.class);
-                
-                if (docUser1Id != null && docUser1Id.equals(userId)) {
-                    Object user1Rating = doc.get("user1Rating");
-                    if (user1Rating != null && user1Rating instanceof Number) {
-                        sum += ((Number) user1Rating).doubleValue();
-                        count++;
-                    }
-                } else if (docUser2Id != null && docUser2Id.equals(userId)) {
-                    Object user2Rating = doc.get("user2Rating");
-                    if (user2Rating != null && user2Rating instanceof Number) {
-                        sum += ((Number) user2Rating).doubleValue();
-                        count++;
-                    }
+                Object avgRating = doc.get("averageRating");
+                if (avgRating != null && avgRating instanceof Number) {
+                    sum += ((Number) avgRating).doubleValue();
+                    count++;
                 }
             }
             
@@ -386,78 +364,27 @@ public class RatingUtil {
                 ).first();
                 
                 if (pairDoc != null) {
-                    Object user1RatingObj = pairDoc.get("user1Rating");
-                    Object user2RatingObj = pairDoc.get("user2Rating");
-                    Object user1AvgObj = pairDoc.get("user1AverageRating");
-                    Object user2AvgObj = pairDoc.get("user2AverageRating");
-                    Object averageObj = pairDoc.get("average");
-                    
-                    double user1Rating = 0.0;
-                    double user2Rating = 0.0;
-                    double user1Avg = 5.0;
-                    double user2Avg = 5.0;
+                    Object averageObj = pairDoc.get("averageRating");
                     double pairAverage = 5.0;
                     
-                    if (user1RatingObj != null && user1RatingObj instanceof Number) {
-                        user1Rating = ((Number) user1RatingObj).doubleValue();
-                    }
-                    if (user2RatingObj != null && user2RatingObj instanceof Number) {
-                        user2Rating = ((Number) user2RatingObj).doubleValue();
-                    }
-                    if (user1AvgObj != null && user1AvgObj instanceof Number) {
-                        user1Avg = ((Number) user1AvgObj).doubleValue();
-                    }
-                    if (user2AvgObj != null && user2AvgObj instanceof Number) {
-                        user2Avg = ((Number) user2AvgObj).doubleValue();
-                    }
                     if (averageObj != null && averageObj instanceof Number) {
                         pairAverage = ((Number) averageObj).doubleValue();
                     }
                     
-                    // user1 정보 표시 (user1 (평균평점) 형식)
+                    // user1 정보 표시
                     result.append("  - user1");
-                    if (sortedUser1Id.equals(user1Id)) {
-                        result.append(" (").append(user1Avg).append(")");
-                        if (user1Username != null) {
-                            result.append(" - username: ").append(user1Username);
-                        }
-                        result.append(" - userId: ").append(user1Id);
-                        if (user1Rating > 0) {
-                            result.append(" - 상대방에게 준 평점: ").append(user1Rating).append("점");
-                        }
-                    } else {
-                        result.append(" (").append(user2Avg).append(")");
-                        if (user2Username != null) {
-                            result.append(" - username: ").append(user2Username);
-                        }
-                        result.append(" - userId: ").append(user2Id);
-                        if (user2Rating > 0) {
-                            result.append(" - 상대방에게 준 평점: ").append(user2Rating).append("점");
-                        }
+                    if (user1Username != null) {
+                        result.append(" - username: ").append(user1Username);
                     }
+                    result.append(" - userId: ").append(sortedUser1Id);
                     result.append("\n");
                     
-                    // user2 정보 표시 (user2 (평균평점) 형식)
+                    // user2 정보 표시
                     result.append("  - user2");
-                    if (sortedUser2Id.equals(user2Id)) {
-                        result.append(" (").append(user2Avg).append(")");
-                        if (user2Username != null) {
-                            result.append(" - username: ").append(user2Username);
-                        }
-                        result.append(" - userId: ").append(user2Id);
-                        if (user2Rating > 0) {
-                            result.append(" - 상대방에게 준 평점: ").append(user2Rating).append("점");
-                        }
-                    } else {
-                        result.append(" (").append(user1Avg).append(")");
-                        if (user1Username != null) {
-                            result.append(" - username: ").append(user1Username);
-                        }
-                        result.append(" - userId: ").append(user1Id);
-                        if (user1Rating > 0) {
-                            result.append(" - 상대방에게 준 평점: ").append(user1Rating).append("점");
-                        }
+                    if (user2Username != null) {
+                        result.append(" - username: ").append(user2Username);
                     }
+                    result.append(" - userId: ").append(sortedUser2Id);
                     result.append("\n");
                     
                     result.append("  - 유저 쌍 평균: ").append(pairAverage).append("점\n");
