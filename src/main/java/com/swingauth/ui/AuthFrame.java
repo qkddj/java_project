@@ -21,8 +21,47 @@ public class AuthFrame extends JFrame {
     setLocationRelativeTo(null);
 
     JTabbedPane tabs = new JTabbedPane();
+    tabs.setBackground(new Color(18, 18, 24));
     tabs.addTab("로그인", buildLoginPanel());
     tabs.addTab("회원가입", buildSignUpPanel());
+
+    // 커스텀 UI로 민트색 배경 완전히 제거
+    tabs.setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI() {
+      private static final Color DARK_BG = new Color(18, 18, 24);
+      private static final Color DARK_BG2 = new Color(28, 28, 36);
+      private static final Color TEXT_LIGHT = new Color(240, 240, 255);
+      
+      @Override
+      protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
+          int x, int y, int w, int h, boolean isSelected) {
+        // 선택된 탭도 어두운 배경만 사용 - 민트색 완전히 제거
+        if (isSelected) {
+          g.setColor(DARK_BG2);
+        } else {
+          g.setColor(DARK_BG);
+        }
+        g.fillRect(x, y, w, h);
+      }
+      
+      @Override
+      protected void paintTabBorder(Graphics g, int tabPlacement, int tabIndex,
+          int x, int y, int w, int h, boolean isSelected) {
+        // 탭 테두리 제거
+      }
+      
+      @Override
+      protected void paintContentBorder(Graphics g, int tabPlacement, int selectedIndex) {
+        // 콘텐츠 영역 테두리 제거
+      }
+      
+      @Override
+      protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
+          int tabIndex, String title, Rectangle textRect, boolean isSelected) {
+        // 텍스트 색상 설정
+        g.setColor(TEXT_LIGHT);
+        super.paintText(g, tabPlacement, font, metrics, tabIndex, title, textRect, isSelected);
+      }
+    });
 
     setContentPane(tabs);
   }
