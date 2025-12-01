@@ -25,6 +25,12 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class RandomChatFrame extends JFrame {
+    // 사이버펑크 네온 다크 테마 색상
+    private static final Color NEON_CYAN = new Color(0, 255, 255);
+    private static final Color NEON_PINK = new Color(255, 0, 128);
+    private static final Color DARK_BG2 = new Color(28, 28, 36);
+    private static final Color DARK_BORDER = new Color(60, 60, 80);
+    private static final Color TEXT_DIM = new Color(160, 160, 180);
     private Socket socket;
     private JTextPane chatArea;
     private JTextField inputField;
@@ -68,8 +74,8 @@ public class RandomChatFrame extends JFrame {
         chatArea.setEditable(false);
         chatArea.setContentType("text/html");
         chatArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-        chatArea.setBorder(new LineBorder(Color.BLACK, 1));
-        chatArea.setBackground(Color.WHITE);
+        chatArea.setBorder(new LineBorder(NEON_CYAN, 1));
+        chatArea.setBackground(DARK_BG2);
         // HTML 문서 초기화
         HTMLEditorKit kit = new HTMLEditorKit();
         HTMLDocument doc = (HTMLDocument) kit.createDefaultDocument();
@@ -94,7 +100,7 @@ public class RandomChatFrame extends JFrame {
 
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
         inputField = new JTextField();
-        inputField.setBorder(new LineBorder(Color.BLACK, 1));
+        inputField.setBorder(new LineBorder(DARK_BORDER, 1));
         inputField.setEnabled(false);
         inputField.setPreferredSize(new Dimension(0, 35));
         
@@ -159,7 +165,7 @@ public class RandomChatFrame extends JFrame {
 
         charCountLabel = new JLabel("0/" + MAX_CHARS);
         charCountLabel.setFont(charCountLabel.getFont().deriveFont(12f));
-        charCountLabel.setForeground(Color.GRAY);
+        charCountLabel.setForeground(TEXT_DIM);
         inputPanel.add(charCountLabel, BorderLayout.EAST);
 
         sendButton = new JButton("보내기");
@@ -297,9 +303,9 @@ public class RandomChatFrame extends JFrame {
         int length = inputField.getText().length();
         charCountLabel.setText(length + "/" + MAX_CHARS);
         if (length > MAX_CHARS) {
-            charCountLabel.setForeground(Color.RED);
+            charCountLabel.setForeground(NEON_PINK);
         } else {
-            charCountLabel.setForeground(Color.GRAY);
+            charCountLabel.setForeground(TEXT_DIM);
         }
     }
 

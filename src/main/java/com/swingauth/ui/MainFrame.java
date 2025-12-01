@@ -11,6 +11,14 @@ import java.awt.event.MouseEvent;
 
 public class MainFrame extends JFrame {
 
+  // 사이버펑크 네온 다크 테마 색상
+  private static final Color NEON_CYAN = new Color(0, 255, 255);
+  private static final Color NEON_PINK = new Color(255, 0, 128);
+  private static final Color DARK_BG = new Color(18, 18, 24);
+  private static final Color DARK_BG2 = new Color(28, 28, 36);
+  private static final Color DARK_BORDER = new Color(60, 60, 80);
+  private static final Color TEXT_LIGHT = new Color(240, 240, 255);
+
   private final User user;
   private final String[] boards = {
       "자유 게시판",
@@ -55,7 +63,8 @@ public class MainFrame extends JFrame {
     // ===== 중앙: 게시판 리스트 (선택 가능) =====
     JPanel centerWrap = new JPanel(new GridBagLayout());
     JPanel boardBox = new JPanel(new BorderLayout());
-    boardBox.setBorder(new LineBorder(Color.BLACK, 3, true));
+    boardBox.setBorder(new LineBorder(NEON_CYAN, 2, true));
+    boardBox.setBackground(DARK_BG2);
     boardBox.setPreferredSize(new Dimension(360, 320));
 
     JList<String> list = new JList<>(boards);
@@ -106,8 +115,16 @@ public class MainFrame extends JFrame {
     JButton btnChat = new JButton("랜덤 채팅");
     JButton btnVideo = new JButton("랜덤 영상 통화");
 
-    btnChat.setBorder(new LineBorder(Color.BLACK, 2, true));
-    btnVideo.setBorder(new LineBorder(Color.BLACK, 2, true));
+    // 네온 스타일 버튼
+    btnChat.setBackground(NEON_CYAN);
+    btnChat.setForeground(DARK_BG);
+    btnChat.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+    btnChat.setFocusPainted(false);
+    
+    btnVideo.setBackground(NEON_PINK);
+    btnVideo.setForeground(Color.WHITE);
+    btnVideo.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+    btnVideo.setFocusPainted(false);
 
     btnChat.addActionListener(e -> {
         MatchingFrame[] matchingFrameRef = new MatchingFrame[1];

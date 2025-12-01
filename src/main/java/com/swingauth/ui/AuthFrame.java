@@ -7,6 +7,11 @@ import javax.swing.*;
 import java.awt.*;
 
 public class AuthFrame extends JFrame {
+  // 사이버펑크 네온 다크 테마 색상
+  private static final Color NEON_CYAN = new Color(0, 255, 255);
+  private static final Color NEON_GREEN = new Color(57, 255, 20);
+  private static final Color NEON_PINK = new Color(255, 0, 128);
+  
   private final AuthService auth = new AuthService();
 
   public AuthFrame() {
@@ -47,7 +52,7 @@ public class AuthFrame extends JFrame {
     row++;
 
     c.gridx = 0; c.gridy = row; c.gridwidth = 2;
-    status.setForeground(new Color(0, 102, 204));
+    status.setForeground(NEON_CYAN);
     panel.add(status, c);
 
     submit.addActionListener(e -> {
@@ -58,16 +63,16 @@ public class AuthFrame extends JFrame {
           try {
             auth.signUp(username.getText(), new String(password.getPassword()));
             status.setText("가입 완료! 이제 로그인해 주세요.");
-            status.setForeground(new Color(0, 128, 0));
+            status.setForeground(NEON_GREEN);
           } catch (IllegalArgumentException ex) {
             status.setText("입력 오류: " + ex.getMessage());
-            status.setForeground(Color.RED);
+            status.setForeground(NEON_PINK);
           } catch (IllegalStateException ex) {
             status.setText("실패: " + ex.getMessage());
-            status.setForeground(Color.RED);
+            status.setForeground(NEON_PINK);
           } catch (Exception ex) {
             status.setText("서버 오류: " + ex.getMessage());
-            status.setForeground(Color.RED);
+            status.setForeground(NEON_PINK);
           }
           return null;
         }
@@ -115,11 +120,11 @@ public class AuthFrame extends JFrame {
             return auth.login(username.getText(), new String(password.getPassword()));
           } catch (IllegalArgumentException ex) {
             status.setText("로그인 실패: " + ex.getMessage());
-            status.setForeground(Color.RED);
+            status.setForeground(NEON_PINK);
             return null;
           } catch (Exception ex) {
             status.setText("서버 오류: " + ex.getMessage());
-            status.setForeground(Color.RED);
+            status.setForeground(NEON_PINK);
             return null;
           }
         }

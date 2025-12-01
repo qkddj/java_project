@@ -16,6 +16,15 @@ import java.util.List;
 
 public class BoardFrame extends JFrame {
 
+  // 사이버펑크 네온 다크 테마 색상
+  private static final Color NEON_CYAN = new Color(0, 255, 255);
+  private static final Color NEON_PURPLE = new Color(191, 64, 255);
+  private static final Color DARK_BG = new Color(18, 18, 24);
+  private static final Color DARK_BG2 = new Color(28, 28, 36);
+  private static final Color DARK_BORDER = new Color(60, 60, 80);
+  private static final Color TEXT_LIGHT = new Color(240, 240, 255);
+  private static final Color TEXT_DIM = new Color(160, 160, 180);
+
   private final User user;
   private final String boardName;
 
@@ -196,10 +205,10 @@ public class BoardFrame extends JFrame {
 
     JPanel card = new JPanel(new BorderLayout(8, 4));
     card.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(Color.LIGHT_GRAY),
+        BorderFactory.createLineBorder(DARK_BORDER),
         new EmptyBorder(8, 8, 8, 8)
     ));
-    card.setBackground(Color.WHITE);
+    card.setBackground(DARK_BG2);
 
     int CARD_HEIGHT = 80;
     card.setPreferredSize(new Dimension(10, CARD_HEIGHT));
@@ -221,7 +230,7 @@ public class BoardFrame extends JFrame {
     );
     JLabel metaLabel = new JLabel(meta);
     metaLabel.setFont(metaLabel.getFont().deriveFont(11f));
-    metaLabel.setForeground(Color.DARK_GRAY);
+    metaLabel.setForeground(TEXT_DIM);
 
     JPanel center = new JPanel(new BorderLayout(4, 4));
     center.setOpaque(false);
@@ -239,12 +248,20 @@ public class BoardFrame extends JFrame {
 
       @Override
       public void mouseEntered(java.awt.event.MouseEvent e) {
-        card.setBackground(new Color(245, 245, 255));
+        card.setBackground(new Color(NEON_CYAN.getRed(), NEON_CYAN.getGreen(), NEON_CYAN.getBlue(), 30));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(NEON_CYAN),
+            new EmptyBorder(8, 8, 8, 8)
+        ));
       }
 
       @Override
       public void mouseExited(java.awt.event.MouseEvent e) {
-        card.setBackground(Color.WHITE);
+        card.setBackground(DARK_BG2);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(DARK_BORDER),
+            new EmptyBorder(8, 8, 8, 8)
+        ));
       }
     });
 

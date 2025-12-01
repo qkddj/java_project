@@ -640,7 +640,7 @@ function submitRating(rating) {
       currentUsername: currentUsername,
       partnerUsername: partnerUsername,
       rating: rating,
-      serviceType: 'video'
+      serviceType: 'randomVideo'
     });
     console.log('평점 전송: ' + rating + '점 (평가자: ' + currentUsername + ', 피평가자: ' + partnerUsername + ')');
   } else {
