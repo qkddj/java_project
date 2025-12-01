@@ -112,6 +112,8 @@ public class BoardFrame extends JFrame {
     cardsPanel = new JPanel();
     cardsPanel.setLayout(new BoxLayout(cardsPanel, BoxLayout.Y_AXIS));
     cardsPanel.setBorder(new EmptyBorder(8, 12, 8, 12));
+    cardsPanel.setBackground(DARK_BG); // 배경색 설정
+    cardsPanel.setOpaque(true); // 윈도우에서 겹침 문제 해결
 
     scrollPane = new JScrollPane(cardsPanel);
     scrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -147,8 +149,14 @@ public class BoardFrame extends JFrame {
     loadedCount = 0;
     noMore = false;
     cardsPanel.removeAll();
+    // 윈도우에서 이전 카드가 겹쳐 보이는 문제 해결
     cardsPanel.revalidate();
     cardsPanel.repaint();
+    // 스크롤 위치 초기화
+    SwingUtilities.invokeLater(() -> {
+      scrollPane.getViewport().setViewPosition(new Point(0, 0));
+      cardsPanel.repaint();
+    });
     loadMore();
   }
 
@@ -190,8 +198,11 @@ public class BoardFrame extends JFrame {
               "오류",
               JOptionPane.ERROR_MESSAGE);
         } finally {
+          // 윈도우에서 카드 겹침 문제 해결을 위해 강제 갱신
           cardsPanel.revalidate();
           cardsPanel.repaint();
+          scrollPane.revalidate();
+          scrollPane.repaint();
           setCursor(Cursor.getDefaultCursor());
           loading = false;
         }
