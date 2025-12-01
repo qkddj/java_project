@@ -209,6 +209,7 @@ public class BoardFrame extends JFrame {
         new EmptyBorder(8, 8, 8, 8)
     ));
     card.setBackground(DARK_BG2);
+    card.setOpaque(true); // 윈도우에서 렌더링 문제 해결을 위해 명시적으로 설정
 
     int CARD_HEIGHT = 80;
     card.setPreferredSize(new Dimension(10, CARD_HEIGHT));
@@ -248,11 +249,13 @@ public class BoardFrame extends JFrame {
 
       @Override
       public void mouseEntered(java.awt.event.MouseEvent e) {
-        card.setBackground(new Color(NEON_CYAN.getRed(), NEON_CYAN.getGreen(), NEON_CYAN.getBlue(), 30));
+        // 알파 값 사용 시 윈도우에서 텍스트 겹침 문제 발생 - 불투명 색상 사용
+        card.setBackground(new Color(20, 50, 55));
         card.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(NEON_CYAN),
             new EmptyBorder(8, 8, 8, 8)
         ));
+        card.repaint(); // 윈도우에서 렌더링 문제 해결
       }
 
       @Override
@@ -262,6 +265,7 @@ public class BoardFrame extends JFrame {
             BorderFactory.createLineBorder(DARK_BORDER),
             new EmptyBorder(8, 8, 8, 8)
         ));
+        card.repaint(); // 윈도우에서 렌더링 문제 해결
       }
     });
 
