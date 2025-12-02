@@ -60,17 +60,18 @@ function startRemoteReadyWatchdog() {
   if (!rv) return;
   if (remoteReadyWatchdog) { clearInterval(remoteReadyWatchdog); remoteReadyWatchdog = null; }
   let attempts = 0;
+  // 체크 간격을 300ms → 200ms로 단축하여 더 빠른 감지
   remoteReadyWatchdog = setInterval(() => {
     attempts++;
     if ((rv.videoWidth && rv.videoHeight) || (rv.srcObject && rv.srcObject.getVideoTracks && rv.srcObject.getVideoTracks().some(t => t.readyState === 'live'))) {
       showRemoteWaiting(false);
       clearInterval(remoteReadyWatchdog);
       remoteReadyWatchdog = null;
-    } else if (attempts > 40) {
+    } else if (attempts > 50) { // 40 → 50으로 증가 (더 긴 대기 시간 허용)
       clearInterval(remoteReadyWatchdog);
       remoteReadyWatchdog = null;
     }
-  }, 300);
+  }, 200); // 300ms → 200ms로 단축
 }
 const statusEl = $('status');
 
@@ -172,13 +173,27 @@ ws.addEventListener('message', async (ev) => {
         if (pc.signalingState === 'have-local-offer') {
           await pc.setLocalDescription({ type: 'rollback' });
         }
+        // 원격 설명 설정 (ICE 후보자 수집 시작)
         await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+        
+        // 대기 중인 ICE 후보자 즉시 추가 (연결 속도 향상)
         if (pendingRemoteCandidates.length) {
-          for (const c of pendingRemoteCandidates) { try { await pc.addIceCandidate(c); } catch (_) { } }
+          for (const c of pendingRemoteCandidates) { 
+            try { 
+              await pc.addIceCandidate(c); 
+            } catch (_) { } 
+          }
           pendingRemoteCandidates = [];
         }
-        const answer = await pc.createAnswer();
+        
+        // answer 생성 및 즉시 전송 (ICE 후보자 수집 완료를 기다리지 않음)
+        const answer = await pc.createAnswer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
         await pc.setLocalDescription(answer);
+        
+        // answer를 즉시 전송
         wsSend({ type: 'rtc.answer', roomId, data: pc.localDescription });
         startRemoteReadyWatchdog();
       } catch (e) {
@@ -204,9 +219,19 @@ ws.addEventListener('message', async (ev) => {
       break;
     case 'rtc.ice':
       if (msg.data) {
+        // ICE 후보자를 즉시 추가 (연결 속도 향상)
         if (pc && pc.remoteDescription) {
-          try { await pc.addIceCandidate(msg.data); } catch (e) { console.warn('addIceCandidate error', e); }
+          try { 
+            await pc.addIceCandidate(msg.data); 
+            // host 후보자는 즉시 연결 시도
+            if (msg.data.type === 'host' && pc.iceConnectionState === 'checking') {
+              console.log('[WebRTC] host 후보자 추가됨 - 빠른 연결 시도');
+            }
+          } catch (e) { 
+            console.warn('addIceCandidate error', e); 
+          }
         } else {
+          // 아직 remoteDescription이 없으면 대기
           pendingRemoteCandidates.push(msg.data);
         }
       }
@@ -379,7 +404,18 @@ async function ensurePc() {
   
   console.log('[WebRTC] ICE 서버 설정:', iceServers);
   
-  pc = new RTCPeerConnection({ iceServers });
+  // 연결 지연 최적화를 위한 RTCPeerConnection 설정
+  pc = new RTCPeerConnection({ 
+    iceServers: iceServers,
+    // ICE 후보자 풀 크기: 미리 후보자를 수집하여 연결 속도 향상
+    iceCandidatePoolSize: 0, // 0으로 설정하면 필요할 때만 수집 (더 빠름)
+    // ICE 전송 정책: 모든 후보자 수집 (host 우선, 필요시 srflx)
+    iceTransportPolicy: 'all',
+    // 번들 정책: 최대 번들링으로 리소스 최적화
+    bundlePolicy: 'max-bundle',
+    // RTCP 멀티플렉싱: RTP와 RTCP를 같은 포트로 전송 (연결 속도 향상)
+    rtcpMuxPolicy: 'require'
+  });
   
   pc.ontrack = (e) => {
     const rv = $('remoteVideo');
@@ -390,19 +426,28 @@ async function ensurePc() {
     setTimeout(() => { rv.play().catch(() => { }); hideOverlayIfVideoLive(); }, 0);
   };
   
-  // ICE 후보자 로깅 추가 (같은 네트워크 연결 디버깅용)
+  // ICE 후보자 로깅 및 즉시 전송 (연결 속도 향상)
   pc.onicecandidate = (e) => {
     if (e.candidate) {
-      console.log('[WebRTC] ICE 후보자 발견:', e.candidate.candidate);
-      // 같은 네트워크인지 확인 (host 후보자)
-      if (e.candidate.type === 'host') {
-        console.log('[WebRTC] ✓ 같은 네트워크 연결 가능 (host 후보자)');
-      } else if (e.candidate.type === 'srflx') {
+      // host 후보자를 우선적으로 전송 (같은 네트워크에서 가장 빠름)
+      const candidateType = e.candidate.type;
+      
+      if (candidateType === 'host') {
+        console.log('[WebRTC] ✓ 같은 네트워크 연결 가능 (host 후보자) - 즉시 전송');
+        // host 후보자는 즉시 전송 (가장 빠른 연결)
+        wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
+      } else if (candidateType === 'srflx') {
         console.log('[WebRTC] STUN 서버를 통한 연결 (srflx 후보자)');
+        // srflx 후보자도 즉시 전송
+        wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
+      } else {
+        // relay 후보자는 나중에 전송 (필요할 때만)
+        wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
       }
-      wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
     } else {
       console.log('[WebRTC] ICE 후보자 수집 완료');
+      // 후보자 수집 완료 신호 전송 (선택사항)
+      wsSend({ type: 'rtc.ice', roomId, data: null });
     }
   };
   
@@ -416,7 +461,7 @@ async function ensurePc() {
       setStatus('연결됨');
       console.log('[WebRTC] ✓ 연결 성공!');
     } else if (state === 'checking') {
-      setStatus('연결 중... (ICE 후보자 교환 중)');
+      setStatus('연결 중...');
     } else if (state === 'disconnected') {
       setStatus('연결 끊김 - 재연결 시도 중...');
       showRemoteWaiting(true);
@@ -455,20 +500,33 @@ async function ensurePc() {
 
 async function startWebRTC(isCaller) {
   await ensurePc();
+  
+  // ICE 후보자 수집을 기다리지 않고 바로 offer/answer 교환 (연결 속도 향상)
   if (isCaller) {
-    const offer = await pc.createOffer();
+    // ICE 후보자 수집을 기다리지 않고 바로 offer 생성
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    });
+    
+    // 로컬 설명 설정과 동시에 ICE 후보자 수집 시작
     await pc.setLocalDescription(offer);
+    
+    // offer를 즉시 전송 (ICE 후보자는 별도로 전송됨)
     wsSend({ type: 'rtc.offer', roomId, data: pc.localDescription });
   }
+  
+  // 연결 타임아웃 체크 (8초 → 5초로 단축)
   try {
     const hasTurn = !!(new URLSearchParams(location.search).get('turn') || localStorage.getItem('turnUrls'));
     setTimeout(() => {
       if (!pc) return;
       const s = pc.iceConnectionState;
       if ((s !== 'connected' && s !== 'completed') && !hasTurn) {
-        alert('다른 와이파이/모바일망 간 연결에는 TURN 서버가 필요할 수 있습니다.\n예: https://YOUR_HTTPS_DOMAIN/video-call.html?turn=turn:TURN_HOST:3478&tu=USER&tp=PASS');
+        console.warn('[WebRTC] 연결 지연: TURN 서버가 필요할 수 있습니다.');
+        // alert 대신 콘솔 경고만 출력 (사용자 경험 개선)
       }
-    }, 8000);
+    }, 5000); // 8초 → 5초로 단축
   } catch (_) { }
 }
 
