@@ -283,13 +283,15 @@ async function getMedia() {
     let hint = '브라우저가 getUserMedia를 지원하지 않거나 정책에 의해 비활성화되었습니다.';
     if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
       hint = 'HTTPS가 필요합니다!\n\n' +
-             '다른 디바이스에서 카메라/마이크를 사용하려면 HTTPS가 필요합니다.\n\n' +
+             '다른 컴퓨터에서 카메라/마이크를 사용하려면 HTTPS가 필요합니다.\n\n' +
              '해결 방법:\n' +
              '1. ngrok 사용 (권장):\n' +
              '   - ngrok 설치: https://ngrok.com/\n' +
-             '   - 터미널에서: ngrok http 8080\n' +
-             '   - 표시된 https://xxx.ngrok.io URL 사용\n\n' +
-             '2. 또는 서버 컴퓨터에서 localhost로 접속 (카메라 사용 가능)';
+             '   - 서버 컴퓨터의 터미널에서 실행:\n' +
+             '     ngrok http ' + location.port + '\n' +
+             '   - 표시된 https://xxx.ngrok.io URL을 다른 컴퓨터에서 사용\n\n' +
+             '2. 또는 서버 컴퓨터에서 localhost로 접속 (카메라/마이크 사용 가능)\n\n' +
+             '현재 접속 URL: ' + location.href;
     }
     throw new Error('mediaDevices_unavailable: ' + hint);
   }
@@ -374,7 +376,11 @@ async function ensurePc() {
       }
     } catch (_) { }
   }
+  
+  console.log('[WebRTC] ICE 서버 설정:', iceServers);
+  
   pc = new RTCPeerConnection({ iceServers });
+  
   pc.ontrack = (e) => {
     const rv = $('remoteVideo');
     rv.srcObject = e.streams[0];
@@ -383,17 +389,64 @@ async function ensurePc() {
     rv.addEventListener('click', () => { try { rv.muted = false; rv.play().catch(() => { }); } catch (_) { } }, { once: true });
     setTimeout(() => { rv.play().catch(() => { }); hideOverlayIfVideoLive(); }, 0);
   };
+  
+  // ICE 후보자 로깅 추가 (같은 네트워크 연결 디버깅용)
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      console.log('[WebRTC] ICE 후보자 발견:', e.candidate.candidate);
+      // 같은 네트워크인지 확인 (host 후보자)
+      if (e.candidate.type === 'host') {
+        console.log('[WebRTC] ✓ 같은 네트워크 연결 가능 (host 후보자)');
+      } else if (e.candidate.type === 'srflx') {
+        console.log('[WebRTC] STUN 서버를 통한 연결 (srflx 후보자)');
+      }
+      wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
+    } else {
+      console.log('[WebRTC] ICE 후보자 수집 완료');
+    }
+  };
+  
+  // ICE 연결 상태 상세 로깅 및 상태 표시
   pc.oniceconnectionstatechange = () => {
     const state = pc.iceConnectionState;
-    if (state === 'connected' || state === 'completed') hideOverlayIfVideoLive();
-    if (state === 'disconnected' || state === 'failed' || state === 'closed') showRemoteWaiting(true);
+    console.log('[WebRTC] ICE 연결 상태 변경:', state);
+    
+    if (state === 'connected' || state === 'completed') {
+      hideOverlayIfVideoLive();
+      setStatus('연결됨');
+      console.log('[WebRTC] ✓ 연결 성공!');
+    } else if (state === 'checking') {
+      setStatus('연결 중... (ICE 후보자 교환 중)');
+    } else if (state === 'disconnected') {
+      setStatus('연결 끊김 - 재연결 시도 중...');
+      showRemoteWaiting(true);
+    } else if (state === 'failed') {
+      setStatus('연결 실패 - 네트워크 확인 필요');
+      showRemoteWaiting(true);
+      console.error('[WebRTC] ✗ ICE 연결 실패 - 방화벽이나 네트워크 설정을 확인하세요');
+      console.error('[WebRTC] 같은 네트워크인지 확인: 두 PC가 같은 Wi-Fi/이더넷에 연결되어 있어야 합니다');
+    } else if (state === 'closed') {
+      showRemoteWaiting(true);
+    }
   };
+  
+  // 연결 상태 변경 로깅
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
-    if (state === 'connected') hideOverlayIfVideoLive();
-    if (state === 'disconnected' || state === 'failed' || state === 'closed') showRemoteWaiting(true);
+    console.log('[WebRTC] 연결 상태 변경:', state);
+    
+    if (state === 'connected') {
+      hideOverlayIfVideoLive();
+      setStatus('연결됨');
+    } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+      showRemoteWaiting(true);
+      if (state === 'failed') {
+        setStatus('연결 실패');
+        console.error('[WebRTC] ✗ 연결 실패');
+      }
+    }
   };
-  pc.onicecandidate = (e) => e.candidate && wsSend({ type: 'rtc.ice', roomId, data: e.candidate });
+  
   const stream = await getMedia();
   stream.getAudioTracks().forEach(t => { micSender = pc.addTrack(t, stream); });
   stream.getVideoTracks().forEach(t => { camSender = pc.addTrack(t, stream); });
@@ -509,7 +562,16 @@ window.handleStartClick = async function(e) {
     
     // HTTPS 확인 (localhost 제외)
     if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-      alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다.\n\nHTTPS 주소로 접속해 주세요.');
+      const currentPort = location.port || '8080';
+      const message = '다른 컴퓨터에서 카메라/마이크를 사용하려면 HTTPS가 필요합니다.\n\n' +
+                     '해결 방법:\n' +
+                     '1. ngrok 사용 (권장):\n' +
+                     '   - 서버 컴퓨터의 터미널에서 실행:\n' +
+                     '     ngrok http ' + currentPort + '\n' +
+                     '   - 표시된 https://xxx.ngrok.io URL을 사용\n\n' +
+                     '2. 또는 서버 컴퓨터에서 localhost로 접속\n\n' +
+                     '현재 URL: ' + location.href;
+      alert(message);
       btnStart.disabled = false;
       btnStart.textContent = '매칭 시작';
       return;

@@ -1,6 +1,8 @@
 package com.swingauth.video;
 
 import com.swingauth.video.server.MatchWebSocketCreator;
+import com.swingauth.util.NetworkDiscovery;
+import com.swingauth.util.NgrokUtil;
 import org.eclipse.jetty.server.*;
 import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -25,6 +27,7 @@ public class ServerLauncher {
     private ServerConnector connector; // 포트 정보를 가져오기 위해 저장
     private static final String PORT_FILE_PATH = System.getProperty("user.home") + "/.video-call-server-port";
     // 고정 포트는 제거 - 파일 기반 포트 공유 방식 사용
+    private Process ngrokProcess; // ngrok 프로세스 추적
 
     public static synchronized ServerLauncher getInstance() {
         if (instance == null) {
@@ -540,17 +543,44 @@ public class ServerLauncher {
         // 포트를 파일에 저장 (이미 저장되어 있어도 덮어쓰기)
         savePortToFile(port);
         
+        // ngrok 자동 실행 시도
+        startNgrok(port);
+        
+        // 잠시 대기 후 ngrok URL 감지 (ngrok이 시작되는 시간 필요)
+        String ngrokUrl = null;
+        for (int i = 0; i < 10; i++) {
+            try {
+                Thread.sleep(500); // 0.5초 대기
+                ngrokUrl = NgrokUtil.getNgrokHttpsUrl();
+                if (ngrokUrl != null) {
+                    break;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        // 네트워크 브로드캐스트 시작 (ngrok URL 포함)
+        NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, ngrokUrl);
+        
         System.out.println("========================================");
         System.out.println("비디오 통화 서버 시작 완료!");
         System.out.println("포트: " + port);
         System.out.println("로컬 접속: http://localhost:" + port + "/video-call.html");
+        if (ngrokUrl != null) {
+            System.out.println("HTTPS 접속 (ngrok): " + ngrokUrl + "/video-call.html");
+            System.out.println("✅ 다른 컴퓨터에서 위 HTTPS URL로 접속하면 카메라/마이크 사용 가능!");
+        } else {
+            System.out.println("⚠️  ngrok이 실행되지 않았습니다. 수동으로 실행하려면:");
+            System.out.println("   ngrok http " + port);
+        }
         System.out.println("========================================");
         
         List<String> ipAddresses = getLocalIpAddresses();
         if (!ipAddresses.isEmpty() && !ipAddresses.get(0).equals("localhost")) {
             String mainIp = ipAddresses.get(0);
             System.out.println("네트워크 접속: http://" + mainIp + ":" + port + "/video-call.html");
-            System.out.println("(다른 디바이스 카메라 사용: ngrok http " + port + " 필요)");
         }
         System.out.println("========================================");
     }
@@ -562,8 +592,148 @@ public class ServerLauncher {
     public int getHttpsPort() {
         return httpsPort;
     }
+    
+    /**
+     * ngrok HTTPS URL 가져오기
+     */
+    public String getNgrokUrl() {
+        return NgrokUtil.getNgrokHttpsUrl();
+    }
+    
+    /**
+     * ngrok 자동 실행
+     */
+    private void startNgrok(int port) {
+        // 이미 ngrok이 실행 중인지 확인
+        if (NgrokUtil.isNgrokRunning()) {
+            System.out.println("[ServerLauncher] ngrok이 이미 실행 중입니다.");
+            return;
+        }
+        
+        // ngrok 프로세스가 이미 실행 중이면 중지
+        if (ngrokProcess != null && ngrokProcess.isAlive()) {
+            System.out.println("[ServerLauncher] 기존 ngrok 프로세스가 실행 중입니다.");
+            return;
+        }
+        
+        Thread ngrokThread = new Thread(() -> {
+            try {
+                System.out.println("[ServerLauncher] ngrok 자동 실행 시도 중... (포트: " + port + ")");
+                
+                // 운영체제에 따라 ngrok 명령어 경로 확인
+                String ngrokCommand = findNgrokCommand();
+                if (ngrokCommand == null) {
+                    System.out.println("[ServerLauncher] ⚠️  ngrok을 찾을 수 없습니다.");
+                    System.out.println("[ServerLauncher]    ngrok 설치: https://ngrok.com/");
+                    System.out.println("[ServerLauncher]    또는 PATH에 ngrok을 추가하세요.");
+                    return;
+                }
+                
+                // ngrok 실행
+                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port));
+                pb.redirectErrorStream(true);
+                ngrokProcess = pb.start();
+                
+                System.out.println("[ServerLauncher] ✅ ngrok 실행 시작됨");
+                System.out.println("[ServerLauncher]    ngrok이 시작되는 동안 잠시 기다려주세요...");
+                
+                // ngrok 프로세스 출력을 읽어서 로그에 표시 (선택사항)
+                Thread outputThread = new Thread(() -> {
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(ngrokProcess.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null && ngrokProcess.isAlive()) {
+                            // ngrok 출력은 조용히 처리 (너무 많은 로그 방지)
+                            if (line.contains("started tunnel") || line.contains("Session Status")) {
+                                System.out.println("[ngrok] " + line);
+                            }
+                        }
+                    } catch (Exception e) {
+                        // 무시
+                    }
+                });
+                outputThread.setDaemon(true);
+                outputThread.start();
+                
+            } catch (Exception e) {
+                System.err.println("[ServerLauncher] ngrok 실행 실패: " + e.getMessage());
+                System.err.println("[ServerLauncher] 수동으로 실행하려면: ngrok http " + port);
+            }
+        });
+        ngrokThread.setDaemon(true);
+        ngrokThread.start();
+    }
+    
+    /**
+     * ngrok 명령어 경로 찾기
+     */
+    private String findNgrokCommand() {
+        // 먼저 "ngrok" 명령어가 PATH에 있는지 확인
+        String os = System.getProperty("os.name").toLowerCase();
+        String[] commands;
+        
+        if (os.contains("win")) {
+            // Windows: ngrok.exe 또는 ngrok
+            commands = new String[]{"ngrok.exe", "ngrok"};
+        } else {
+            // macOS/Linux: ngrok
+            commands = new String[]{"ngrok"};
+        }
+        
+        for (String cmd : commands) {
+            try {
+                Process process = Runtime.getRuntime().exec(
+                    os.contains("win") ? new String[]{"where", cmd} : new String[]{"which", cmd});
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(process.getInputStream()))) {
+                        String path = reader.readLine();
+                        if (path != null && !path.isEmpty()) {
+                            return cmd; // 명령어만 반환 (PATH에서 찾을 수 있음)
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 계속 시도
+            }
+        }
+        
+        // 일반적인 설치 경로 확인 (macOS)
+        if (os.contains("mac")) {
+            String[] commonPaths = {
+                "/usr/local/bin/ngrok",
+                "/opt/homebrew/bin/ngrok",
+                System.getProperty("user.home") + "/ngrok"
+            };
+            for (String path : commonPaths) {
+                java.io.File file = new java.io.File(path);
+                if (file.exists() && file.canExecute()) {
+                    return path;
+                }
+            }
+        }
+        
+        return null;
+    }
 
     public void stop() throws Exception {
+        // ngrok 프로세스 종료
+        if (ngrokProcess != null && ngrokProcess.isAlive()) {
+            System.out.println("[ServerLauncher] ngrok 프로세스 종료 중...");
+            ngrokProcess.destroy();
+            try {
+                // 프로세스가 종료될 때까지 최대 3초 대기
+                if (!ngrokProcess.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                    ngrokProcess.destroyForcibly();
+                }
+            } catch (InterruptedException e) {
+                ngrokProcess.destroyForcibly();
+                Thread.currentThread().interrupt();
+            }
+            ngrokProcess = null;
+        }
+        
         if (server != null && server.isStarted()) {
             server.stop();
             // 서버 종료 시 포트 파일 삭제 (선택사항 - 서버 재시작 시 같은 포트 사용하려면 유지)
