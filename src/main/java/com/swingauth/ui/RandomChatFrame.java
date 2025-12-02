@@ -287,9 +287,38 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
         // 기존 리스너 제거 (중복 방지)
         socket.off();
         
+        // 연결 오류 처리
+        socket.on(Socket.EVENT_CONNECT_ERROR, args -> {
+            SwingUtilities.invokeLater(() -> {
+                String errorMsg = args.length > 0 ? args[0].toString() : "알 수 없는 오류";
+                System.err.println("소켓 연결 오류: " + errorMsg);
+                addMessage("시스템", "서버 연결 오류: " + errorMsg, false);
+                JOptionPane.showMessageDialog(this, 
+                    "서버 연결에 실패했습니다.\n서버가 실행 중인지 확인하세요.\n\n서버 주소: " + ServerConfig.getServerURL(),
+                    "연결 오류", JOptionPane.ERROR_MESSAGE);
+            });
+        });
+        
+        // 연결 해제 처리
+        socket.on(Socket.EVENT_DISCONNECT, args -> {
+            SwingUtilities.invokeLater(() -> {
+                System.out.println("소켓 연결 해제");
+                addMessage("시스템", "서버 연결이 끊어졌습니다.", false);
+                isConnected = false;
+                inputField.setEnabled(false);
+                sendButton.setEnabled(false);
+            });
+        });
+        
         socket.on(Socket.EVENT_CONNECT, args -> {
             SwingUtilities.invokeLater(() -> {
+                System.out.println("소켓 연결 성공: " + socket.id());
                 addMessage("시스템", "서버에 연결되었습니다.", false);
+                // username 등록
+                if (currentUser != null && currentUser.username != null && !currentUser.username.isBlank()) {
+                    socket.emit("registerUsername", currentUser.username);
+                    System.out.println("RandomChatFrame: Username 등록 전송: " + currentUser.username + " (Socket ID: " + socket.id() + ")");
+                }
             });
         });
 
@@ -366,6 +395,9 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
 
     private void connectSocket() {
         try {
+            String serverURL = ServerConfig.getServerURL();
+            System.out.println("소켓 연결 시도: " + serverURL);
+            
             IO.Options options = IO.Options.builder()
                     .setTransports(new String[]{"websocket", "polling"})
                     .setReconnection(true)
@@ -373,12 +405,36 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
                     .setReconnectionDelay(1000)
                     .setTimeout(20000)
                     .build();
-            socket = IO.socket(ServerConfig.getServerURL(), options);
+            socket = IO.socket(serverURL, options);
             setupSocketListeners();
             socket.connect();
+            
+            // 연결 타임아웃 체크
+            new Thread(() -> {
+                try {
+                    Thread.sleep(5000); // 5초 대기
+                    if (socket != null && !socket.connected()) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(this, 
+                                "서버 연결 시간이 초과되었습니다.\n\n서버 주소: " + serverURL + "\n서버가 실행 중인지 확인하세요.",
+                                "연결 타임아웃", JOptionPane.WARNING_MESSAGE);
+                        });
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }).start();
         } catch (URISyntaxException e) {
-            JOptionPane.showMessageDialog(this, "서버 연결 실패: " + e.getMessage(),
-                    "오류", JOptionPane.ERROR_MESSAGE);
+            System.err.println("서버 URL 오류: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, 
+                "서버 연결 실패: " + e.getMessage() + "\n\n서버 주소: " + ServerConfig.getServerURL(),
+                "연결 오류", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception e) {
+            System.err.println("소켓 연결 중 예외 발생: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, 
+                "소켓 연결 중 오류가 발생했습니다: " + e.getMessage() + "\n\n서버 주소: " + ServerConfig.getServerURL(),
+                "연결 오류", JOptionPane.ERROR_MESSAGE);
         }
     }
 

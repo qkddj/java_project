@@ -114,27 +114,29 @@ public class RatingDialog extends JDialog implements ThemeManager.ThemeChangeLis
             JButton btn = ratingButtons[i];
             if (i < selectedRating) {
                 // 선택된 평점까지 강조 표시
-                btn.setBackground(isDarkMode ? ThemeManager.NEON_CYAN : ThemeManager.LIGHT_CYAN);
-                btn.setForeground(isDarkMode ? ThemeManager.DARK_BG : Color.WHITE);
+                Color btnBg = isDarkMode ? ThemeManager.NEON_CYAN : ThemeManager.LIGHT_CYAN;
+                Color btnFg = isDarkMode ? ThemeManager.DARK_BG : Color.WHITE;
+                ThemeManager.updateButtonColors(btn, btnBg, btnFg);
                 btn.setBorder(BorderFactory.createLineBorder(
                     isDarkMode ? ThemeManager.NEON_CYAN : ThemeManager.LIGHT_CYAN, 3));
             } else {
                 // 선택되지 않은 버튼
-                btn.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-                btn.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+                Color btnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+                Color btnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+                ThemeManager.updateButtonColors(btn, btnBg, btnFg);
                 btn.setBorder(BorderFactory.createLineBorder(
                     isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 2));
             }
         }
         
         // 제출 및 건너뛰기 버튼
-        submitButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        submitButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        Color btnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+        Color btnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        ThemeManager.updateButtonColors(submitButton, btnBg, btnFg);
         submitButton.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
         
-        skipButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        skipButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        ThemeManager.updateButtonColors(skipButton, btnBg, btnFg);
         skipButton.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
         

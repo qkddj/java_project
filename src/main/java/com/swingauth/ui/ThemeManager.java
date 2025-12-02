@@ -209,24 +209,11 @@ public class ThemeManager {
             }
         });
         
-        // 마우스 리스너로 모든 효과 완전 차단 - 모든 기존 리스너 제거 후 새로 추가
-        java.awt.event.MouseListener[] existingListeners = button.getMouseListeners();
-        for (java.awt.event.MouseListener listener : existingListeners) {
-            button.removeMouseListener(listener);
-        }
-        
-        java.awt.event.MouseMotionListener[] existingMotionListeners = button.getMouseMotionListeners();
-        for (java.awt.event.MouseMotionListener listener : existingMotionListeners) {
-            button.removeMouseMotionListener(listener);
-        }
-        
-        // 호버 효과 완전 차단을 위한 마우스 리스너 (이벤트 소비 및 색상 강제 유지)
+        // 호버 효과 완전 차단을 위한 마우스 리스너 (이벤트 소비하지 않음 - 클릭 이벤트 보장)
         button.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseEntered(java.awt.event.MouseEvent e) {
-                // 호버 이벤트 완전 차단
-                e.consume();
-                // 색상을 즉시 강제로 원래 색상으로 복원
+                // 색상을 즉시 강제로 원래 색상으로 복원 (이벤트는 소비하지 않음)
                 Color bg = (Color) button.getClientProperty(BG_KEY);
                 Color fg = (Color) button.getClientProperty(FG_KEY);
                 if (bg != null) {
@@ -241,8 +228,7 @@ public class ThemeManager {
             
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
-                // 마우스 나갈 때도 색상 유지
-                e.consume();
+                // 마우스 나갈 때도 색상 유지 (이벤트는 소비하지 않음)
                 Color bg = (Color) button.getClientProperty(BG_KEY);
                 Color fg = (Color) button.getClientProperty(FG_KEY);
                 if (bg != null) button.setBackground(bg);
@@ -270,12 +256,11 @@ public class ThemeManager {
             }
         });
         
-        // 마우스 모션 리스너도 추가하여 호버 효과 완전 차단
+        // 마우스 모션 리스너도 추가하여 호버 효과 완전 차단 (이벤트 소비하지 않음)
         button.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
             public void mouseMoved(java.awt.event.MouseEvent e) {
-                // 마우스 이동 이벤트 완전 차단 및 색상 강제 유지
-                e.consume();
+                // 마우스 이동 시 색상 강제 유지 (이벤트는 소비하지 않음)
                 Color bg = (Color) button.getClientProperty(BG_KEY);
                 Color fg = (Color) button.getClientProperty(FG_KEY);
                 if (bg != null) {
@@ -284,12 +269,6 @@ public class ThemeManager {
                 }
                 if (fg != null) button.setForeground(fg);
                 button.repaint();
-            }
-            
-            @Override
-            public void mouseDragged(java.awt.event.MouseEvent e) {
-                // 드래그 이벤트도 차단
-                e.consume();
             }
         });
         

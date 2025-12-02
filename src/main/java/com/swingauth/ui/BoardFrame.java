@@ -491,12 +491,54 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JButton btnReport = new JButton("신고");
     JButton btnClose = new JButton("닫기");
     
+    // 초기 색상 설정 (현재 테마에 맞게)
+    boolean currentDarkMode = themeManager.isDarkMode();
+    Color btnBg = currentDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+    Color btnFg = currentDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+    
+    btnLike.setBackground(btnBg);
+    btnLike.setForeground(btnFg);
+    btnDislike.setBackground(btnBg);
+    btnDislike.setForeground(btnFg);
+    btnEdit.setBackground(btnBg);
+    btnEdit.setForeground(btnFg);
+    btnComment.setBackground(btnBg);
+    btnComment.setForeground(btnFg);
+    btnReport.setBackground(btnBg);
+    btnReport.setForeground(btnFg);
+    btnClose.setBackground(btnBg);
+    btnClose.setForeground(btnFg);
+    
+    // 테두리 설정
+    Color borderColor = currentDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
+    btnLike.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnDislike.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnEdit.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnComment.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnReport.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnClose.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    
+    btnLike.setFocusPainted(false);
+    btnDislike.setFocusPainted(false);
+    btnEdit.setFocusPainted(false);
+    btnComment.setFocusPainted(false);
+    btnReport.setFocusPainted(false);
+    btnClose.setFocusPainted(false);
+    
     ThemeManager.disableButtonPressedEffect(btnLike);
     ThemeManager.disableButtonPressedEffect(btnDislike);
     ThemeManager.disableButtonPressedEffect(btnEdit);
     ThemeManager.disableButtonPressedEffect(btnComment);
     ThemeManager.disableButtonPressedEffect(btnReport);
     ThemeManager.disableButtonPressedEffect(btnClose);
+    
+    // 색상 저장
+    ThemeManager.updateButtonColors(btnLike, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnDislike, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnEdit, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnComment, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnReport, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnClose, btnBg, btnFg);
 
     if (!isOwner) {
       btnEdit.setEnabled(false);
@@ -630,8 +672,29 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
 
       JButton okButton = new JButton("확인");
       JButton cancelButton = new JButton("취소");
+      
+      // 초기 색상 설정
+      boolean reportDarkMode = themeManager.isDarkMode();
+      Color reportBtnBg = reportDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+      Color reportBtnFg = reportDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+      
+      okButton.setBackground(reportBtnBg);
+      okButton.setForeground(reportBtnFg);
+      okButton.setBorder(BorderFactory.createLineBorder(
+          reportDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      okButton.setFocusPainted(false);
+      
+      cancelButton.setBackground(reportBtnBg);
+      cancelButton.setForeground(reportBtnFg);
+      cancelButton.setBorder(BorderFactory.createLineBorder(
+          reportDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      cancelButton.setFocusPainted(false);
+      
       ThemeManager.disableButtonPressedEffect(okButton);
       ThemeManager.disableButtonPressedEffect(cancelButton);
+      
+      ThemeManager.updateButtonColors(okButton, reportBtnBg, reportBtnFg);
+      ThemeManager.updateButtonColors(cancelButton, reportBtnBg, reportBtnFg);
       
       okButton.addActionListener(ev -> {
         String reason = taReason.getText();
@@ -698,17 +761,21 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         reasonScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
         reasonScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
         
-        okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-        okButton.setBorder(BorderFactory.createLineBorder(
-          isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
-        ThemeManager.disableButtonPressedEffect(okButton);
+        Color reportThemeBtnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+        Color reportThemeBtnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        Color reportThemeBtnBorder = isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
         
-        cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-        cancelButton.setBorder(BorderFactory.createLineBorder(
-          isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        okButton.setBackground(reportThemeBtnBg);
+        okButton.setForeground(reportThemeBtnFg);
+        okButton.setBorder(BorderFactory.createLineBorder(reportThemeBtnBorder, 1));
+        ThemeManager.disableButtonPressedEffect(okButton);
+        ThemeManager.updateButtonColors(okButton, reportThemeBtnBg, reportThemeBtnFg);
+        
+        cancelButton.setBackground(reportThemeBtnBg);
+        cancelButton.setForeground(reportThemeBtnFg);
+        cancelButton.setBorder(BorderFactory.createLineBorder(reportThemeBtnBorder, 1));
         ThemeManager.disableButtonPressedEffect(cancelButton);
+        ThemeManager.updateButtonColors(cancelButton, reportThemeBtnBg, reportThemeBtnFg);
         
         reportDialog.repaint();
       };
@@ -783,50 +850,45 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       centerPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
       
       // 버튼들 (다크모드: 흰색, 라이트모드: 검정색)
-      btnLike.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnLike.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnLike.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      Color detailBtnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+      Color detailBtnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+      Color detailBtnBorder = isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
+      
+      btnLike.setBackground(detailBtnBg);
+      btnLike.setForeground(detailBtnFg);
+      btnLike.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnLike.setFocusPainted(false);
+      ThemeManager.updateButtonColors(btnLike, detailBtnBg, detailBtnFg);
       
-      btnDislike.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnDislike.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnDislike.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      btnDislike.setBackground(detailBtnBg);
+      btnDislike.setForeground(detailBtnFg);
+      btnDislike.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnDislike.setFocusPainted(false);
+      ThemeManager.updateButtonColors(btnDislike, detailBtnBg, detailBtnFg);
       
-      btnEdit.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnEdit.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnEdit.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      btnEdit.setBackground(detailBtnBg);
+      btnEdit.setForeground(detailBtnFg);
+      btnEdit.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnEdit.setFocusPainted(false);
+      ThemeManager.updateButtonColors(btnEdit, detailBtnBg, detailBtnFg);
       
-      btnComment.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnComment.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnComment.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      btnComment.setBackground(detailBtnBg);
+      btnComment.setForeground(detailBtnFg);
+      btnComment.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnComment.setFocusPainted(false);
-      ThemeManager.disableButtonPressedEffect(btnComment);
+      ThemeManager.updateButtonColors(btnComment, detailBtnBg, detailBtnFg);
       
-      btnReport.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnReport.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnReport.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      btnReport.setBackground(detailBtnBg);
+      btnReport.setForeground(detailBtnFg);
+      btnReport.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnReport.setFocusPainted(false);
-      ThemeManager.disableButtonPressedEffect(btnReport);
+      ThemeManager.updateButtonColors(btnReport, detailBtnBg, detailBtnFg);
       
-      btnClose.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      btnClose.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      btnClose.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
-      ));
+      btnClose.setBackground(detailBtnBg);
+      btnClose.setForeground(detailBtnFg);
+      btnClose.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnClose.setFocusPainted(false);
-      ThemeManager.disableButtonPressedEffect(btnClose);
+      ThemeManager.updateButtonColors(btnClose, detailBtnBg, detailBtnFg);
       
       // 하단 패널
       bottomPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
@@ -876,8 +938,29 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
 
     JButton okButton = new JButton("확인");
     JButton cancelButton = new JButton("취소");
+    
+    // 초기 색상 설정
+    boolean newPostDarkMode = themeManager.isDarkMode();
+    Color newPostBtnBg = newPostDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+    Color newPostBtnFg = newPostDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+    
+    okButton.setBackground(newPostBtnBg);
+    okButton.setForeground(newPostBtnFg);
+    okButton.setBorder(BorderFactory.createLineBorder(
+        newPostDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    okButton.setFocusPainted(false);
+    
+    cancelButton.setBackground(newPostBtnBg);
+    cancelButton.setForeground(newPostBtnFg);
+    cancelButton.setBorder(BorderFactory.createLineBorder(
+        newPostDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    cancelButton.setFocusPainted(false);
+    
     ThemeManager.disableButtonPressedEffect(okButton);
     ThemeManager.disableButtonPressedEffect(cancelButton);
+    
+    ThemeManager.updateButtonColors(okButton, newPostBtnBg, newPostBtnFg);
+    ThemeManager.updateButtonColors(cancelButton, newPostBtnBg, newPostBtnFg);
     
     okButton.addActionListener(e -> {
       String title = tfTitle.getText();
@@ -932,17 +1015,21 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       contentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
       contentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
       
-      okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      okButton.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
-      ThemeManager.disableButtonPressedEffect(okButton);
+      Color btnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+      Color btnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+      Color btnBorder = isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
       
-      cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      cancelButton.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      okButton.setBackground(btnBg);
+      okButton.setForeground(btnFg);
+      okButton.setBorder(BorderFactory.createLineBorder(btnBorder, 1));
+      ThemeManager.disableButtonPressedEffect(okButton);
+      ThemeManager.updateButtonColors(okButton, btnBg, btnFg);
+      
+      cancelButton.setBackground(btnBg);
+      cancelButton.setForeground(btnFg);
+      cancelButton.setBorder(BorderFactory.createLineBorder(btnBorder, 1));
       ThemeManager.disableButtonPressedEffect(cancelButton);
+      ThemeManager.updateButtonColors(cancelButton, btnBg, btnFg);
       
       dialog.repaint();
     };
@@ -985,8 +1072,29 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
 
     JButton okButton = new JButton("확인");
     JButton cancelButton = new JButton("취소");
+    
+    // 초기 색상 설정
+    boolean editDarkMode = themeManager.isDarkMode();
+    Color editBtnBg = editDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+    Color editBtnFg = editDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+    
+    okButton.setBackground(editBtnBg);
+    okButton.setForeground(editBtnFg);
+    okButton.setBorder(BorderFactory.createLineBorder(
+        editDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    okButton.setFocusPainted(false);
+    
+    cancelButton.setBackground(editBtnBg);
+    cancelButton.setForeground(editBtnFg);
+    cancelButton.setBorder(BorderFactory.createLineBorder(
+        editDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    cancelButton.setFocusPainted(false);
+    
     ThemeManager.disableButtonPressedEffect(okButton);
     ThemeManager.disableButtonPressedEffect(cancelButton);
+    
+    ThemeManager.updateButtonColors(okButton, editBtnBg, editBtnFg);
+    ThemeManager.updateButtonColors(cancelButton, editBtnBg, editBtnFg);
     
     okButton.addActionListener(e -> {
       String newTitle = tfTitle.getText();
@@ -1041,17 +1149,21 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       contentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
       contentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
       
-      okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      okButton.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
-      ThemeManager.disableButtonPressedEffect(okButton);
+      Color btnBg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+      Color btnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+      Color btnBorder = isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
       
-      cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-      cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-      cancelButton.setBorder(BorderFactory.createLineBorder(
-        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      okButton.setBackground(btnBg);
+      okButton.setForeground(btnFg);
+      okButton.setBorder(BorderFactory.createLineBorder(btnBorder, 1));
+      ThemeManager.disableButtonPressedEffect(okButton);
+      ThemeManager.updateButtonColors(okButton, btnBg, btnFg);
+      
+      cancelButton.setBackground(btnBg);
+      cancelButton.setForeground(btnFg);
+      cancelButton.setBorder(BorderFactory.createLineBorder(btnBorder, 1));
       ThemeManager.disableButtonPressedEffect(cancelButton);
+      ThemeManager.updateButtonColors(cancelButton, btnBg, btnFg);
       
       dialog.repaint();
     };

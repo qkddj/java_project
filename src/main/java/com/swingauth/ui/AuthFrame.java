@@ -4,6 +4,7 @@ import com.swingauth.model.User;
 import com.swingauth.service.AuthService;
 
 import javax.swing.*;
+import javax.swing.SwingUtilities;
 import java.awt.*;
 
 public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListener {
@@ -16,6 +17,7 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
   private JPanel loginPanel;
   private JPanel signUpPanel;
   private JPanel top;
+  private int hoveredTabIndex = -1; // 호버된 탭 인덱스 추적
 
   public AuthFrame() {
     setTitle("로그인 / 회원가입 (MongoDB + Swing)");
@@ -113,21 +115,54 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     UIManager.put("TabbedPane.unselectedBackground", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     UIManager.put("TabbedPane.foreground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
     UIManager.put("TabbedPane.selectedForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+    UIManager.put("TabbedPane.selectedBackground", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("TabbedPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     
     // 탭 UI 커스터마이징 - 선택 시 시각적 변화 완전 제거
     tabs.setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI() {
       @Override
       protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
                                         int x, int y, int w, int h, boolean isSelected) {
-        // 선택 여부와 관계없이 동일한 배경색 사용 (명시적으로 설정)
-        // 라이트 모드에서는 밝은 색상 강제 사용
-        Color bgColor = isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
-        g.setColor(bgColor);
-        g.fillRect(x, y, w, h);
+        // 호버 상태에 따라 배경색 결정
+        boolean isHovered = (hoveredTabIndex == tabIndex);
+        Color bgColor;
+        
+        if (isDarkMode) {
+          // 다크 모드: 호버 시 검은색 (DARK_BG2 또는 더 어두운 색)
+          bgColor = isHovered ? ThemeManager.DARK_BG2 : ThemeManager.DARK_BG;
+        } else {
+          // 라이트 모드: 호버 시 투명 (배경을 그리지 않음)
+          bgColor = isHovered ? new Color(0, 0, 0, 0) : ThemeManager.LIGHT_BG;
+        }
+        
+        // 배경 그리기 (투명이 아닌 경우에만)
+        if (bgColor.getAlpha() > 0) {
+          g.setColor(bgColor);
+          g.fillRect(x, y, w, h);
+        }
+        
         // 탭 배경색도 명시적으로 설정 (즉시 적용)
         if (tabIndex < tabs.getTabCount()) {
-          tabs.setBackgroundAt(tabIndex, bgColor);
+          // 투명인 경우 원래 배경색 유지
+          Color tabBgColor = isHovered && !isDarkMode ? ThemeManager.LIGHT_BG : bgColor;
+          tabs.setBackgroundAt(tabIndex, tabBgColor);
           tabs.setForegroundAt(tabIndex, isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        }
+      }
+      
+      @Override
+      protected void paintTab(Graphics g, int tabPlacement, Rectangle[] rects, int tabIndex,
+                               Rectangle iconRect, Rectangle textRect) {
+        Color fgColor = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        
+        // 기본 paintTab 호출하지 않고 직접 그리기 (호버 효과 포함)
+        Rectangle tabRect = rects[tabIndex];
+        paintTabBackground(g, tabPlacement, tabIndex, tabRect.x, tabRect.y, tabRect.width, tabRect.height, tabIndex == tabs.getSelectedIndex());
+        paintText(g, tabPlacement, tabs.getFont(), g.getFontMetrics(tabs.getFont()), tabIndex, tabs.getTitleAt(tabIndex), textRect, tabIndex == tabs.getSelectedIndex());
+        
+        // 텍스트 색상 유지
+        if (tabIndex < tabs.getTabCount()) {
+          tabs.setForegroundAt(tabIndex, fgColor);
         }
       }
 
@@ -197,6 +232,30 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     // 탭 전체 배경도 설정
     tabs.setBackground(tabBg);
     tabs.setForeground(tabFg);
+    
+    // 탭 호버 효과를 위한 마우스 리스너
+    tabs.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+      @Override
+      public void mouseMoved(java.awt.event.MouseEvent e) {
+        // 마우스 위치에 해당하는 탭 인덱스 찾기
+        int tabIndex = tabs.indexAtLocation(e.getX(), e.getY());
+        if (tabIndex != hoveredTabIndex) {
+          hoveredTabIndex = tabIndex;
+          tabs.repaint();
+        }
+      }
+    });
+    
+    tabs.addMouseListener(new java.awt.event.MouseAdapter() {
+      @Override
+      public void mouseExited(java.awt.event.MouseEvent e) {
+        // 마우스가 탭 영역을 벗어나면 호버 상태 해제
+        if (hoveredTabIndex != -1) {
+          hoveredTabIndex = -1;
+          tabs.repaint();
+        }
+      }
+    });
     
     // 상단 패널 배경색 설정
     if (top != null) {
