@@ -177,6 +177,33 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
                     String statusMsg = "서버 연결 실패: " + errorMsg;
                     if (errorMsg.contains("Connection refused") || errorMsg.contains("connect")) {
                         statusMsg += "\n서버가 실행 중인지 확인하세요.";
+                        
+                        // 연결 실패 시 서버 IP 입력 다이얼로그 표시
+                        int option = JOptionPane.showConfirmDialog(
+                            MatchingFrame.this,
+                            "서버에 연결할 수 없습니다.\n\n" +
+                            "현재 시도한 주소: " + ServerConfig.getServerURL() + "\n\n" +
+                            "서버 IP 주소를 변경하시겠습니까?",
+                            "서버 연결 실패",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                        
+                        if (option == JOptionPane.YES_OPTION) {
+                            // 서버 IP 입력 다이얼로그 표시
+                            if (ServerIPDialog.showDialog(MatchingFrame.this)) {
+                                // 새로운 서버 주소로 재연결 시도
+                                try {
+                                    if (socket != null && socket.connected()) {
+                                        socket.disconnect();
+                                    }
+                                    connectSocket();
+                                } catch (Exception e) {
+                                    System.err.println("재연결 실패: " + e.getMessage());
+                                    e.printStackTrace();
+                                }
+                            }
+                        }
                     }
                     statusLabel.setText(statusMsg);
                 });

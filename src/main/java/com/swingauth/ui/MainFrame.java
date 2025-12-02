@@ -29,6 +29,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
   private JButton btnChat;
   private JButton btnVideo;
   private JButton themeToggleBtn;
+  private JPanel leftPanel;
   private final String[] boards = {
       "자유 게시판",
       "동네 소식 게시판",
@@ -51,7 +52,8 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     top = new JPanel(new BorderLayout());
     top.setBorder(BorderFactory.createEmptyBorder(10, 12, 0, 12));
 
-    // 좌측 상단: 테마 전환 버튼
+    // 좌측 상단: 테마 전환 버튼 + 서버 설정 버튼
+    leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
     themeToggleBtn = new JButton("🌙 다크모드");
     themeToggleBtn.setFont(themeToggleBtn.getFont().deriveFont(Font.BOLD, 12f));
     themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -59,6 +61,24 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     themeToggleBtn.addActionListener(e -> {
       themeManager.toggleTheme();
     });
+    
+    JButton serverConfigBtn = new JButton("⚙️ 서버 설정");
+    serverConfigBtn.setFont(serverConfigBtn.getFont().deriveFont(Font.BOLD, 12f));
+    serverConfigBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    serverConfigBtn.setFocusPainted(false);
+    serverConfigBtn.addActionListener(e -> {
+      if (ServerIPDialog.showDialog(this)) {
+        JOptionPane.showMessageDialog(this, 
+          "서버 주소가 변경되었습니다.\n" +
+          "새 주소: " + com.swingauth.config.ServerConfig.getServerURL() + "\n\n" +
+          "랜덤 채팅을 다시 시작하면 새로운 서버에 연결됩니다.",
+          "서버 설정 변경됨",
+          JOptionPane.INFORMATION_MESSAGE);
+      }
+    });
+    
+    leftPanel.add(themeToggleBtn);
+    leftPanel.add(serverConfigBtn);
     
     // ThemeManager에 리스너 등록
     themeManager.addThemeChangeListener(this);
@@ -78,7 +98,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     right.add(idAndLoc);
     right.add(logout);
 
-    top.add(themeToggleBtn, BorderLayout.WEST);
+    top.add(leftPanel, BorderLayout.WEST);
     top.add(right, BorderLayout.EAST);
     add(top, BorderLayout.NORTH);
 
@@ -152,6 +172,8 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     btnVideo.setFocusPainted(false);
 
     btnChat.addActionListener(e -> {
+        // 서버 IP 설정 다이얼로그 표시 (선택 사항)
+        // 사용자가 원하면 서버 주소를 변경할 수 있음
         MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
         matchingFrameRef[0] = new MatchingFrame(user, () -> {
             // 매칭 완료 시 채팅 화면 열기 (소켓 전달)
@@ -251,6 +273,14 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+      
+      leftPanel.setBackground(ThemeManager.DARK_BG);
+      if (leftPanel.getComponentCount() > 1) {
+        JButton serverConfigBtn = (JButton) leftPanel.getComponent(1);
+        serverConfigBtn.setBackground(ThemeManager.DARK_BG2);
+        serverConfigBtn.setForeground(ThemeManager.TEXT_LIGHT);
+        serverConfigBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+      }
     } else {
       // 라이트모드 적용
       getContentPane().setBackground(ThemeManager.LIGHT_BG);
@@ -294,6 +324,14 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+      
+      leftPanel.setBackground(ThemeManager.LIGHT_BG);
+      if (leftPanel.getComponentCount() > 1) {
+        JButton serverConfigBtn = (JButton) leftPanel.getComponent(1);
+        serverConfigBtn.setBackground(ThemeManager.LIGHT_BG2);
+        serverConfigBtn.setForeground(ThemeManager.TEXT_DARK);
+        serverConfigBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+      }
     }
     
     // 스크롤바 스타일도 적용
