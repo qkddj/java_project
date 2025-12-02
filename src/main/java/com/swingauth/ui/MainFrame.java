@@ -56,6 +56,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     themeToggleBtn.setFont(themeToggleBtn.getFont().deriveFont(Font.BOLD, 12f));
     themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     themeToggleBtn.setFocusPainted(false);
+    ThemeManager.disableButtonPressedEffect(themeToggleBtn);
     themeToggleBtn.addActionListener(e -> {
       themeManager.toggleTheme();
     });
@@ -69,6 +70,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     idAndLoc.setFont(idAndLoc.getFont().deriveFont(Font.BOLD, 14f));
 
     logout = new JButton("로그아웃");
+    ThemeManager.disableButtonPressedEffect(logout);
     logout.addActionListener(e -> {
       SwingUtilities.invokeLater(() -> new AuthFrame().setVisible(true));
       dispose();
@@ -120,6 +122,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     // 하단: 선택된 게시판 열기 버튼
     openBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
     btnOpen = new JButton("열기");
+    ThemeManager.disableButtonPressedEffect(btnOpen);
     btnOpen.addActionListener(e -> {
       String sel = list.getSelectedValue();
       if (sel == null) {
@@ -145,11 +148,13 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     btnChat.setForeground(ThemeManager.DARK_BG);
     btnChat.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
     btnChat.setFocusPainted(false);
+    ThemeManager.disableButtonPressedEffect(btnChat);
     
     btnVideo.setBackground(ThemeManager.NEON_PINK);
     btnVideo.setForeground(Color.WHITE);
     btnVideo.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
     btnVideo.setFocusPainted(false);
+    ThemeManager.disableButtonPressedEffect(btnVideo);
 
     btnChat.addActionListener(e -> {
         MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
@@ -208,6 +213,11 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
   
   private void applyTheme() {
     boolean isDarkMode = themeManager.isDarkMode();
+    
+    // JOptionPane 배경색 설정
+    UIManager.put("OptionPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
     if (isDarkMode) {
       // 다크모드 적용
       getContentPane().setBackground(ThemeManager.DARK_BG);

@@ -76,6 +76,9 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     searchField = new JTextField();
     JButton btnSearch = new JButton("검색");
     JButton btnNew = new JButton("글쓰기");
+    
+    ThemeManager.disableButtonPressedEffect(btnSearch);
+    ThemeManager.disableButtonPressedEffect(btnNew);
 
     btnSearch.addActionListener(e -> {
       currentKeyword = searchField.getText();
@@ -127,6 +130,8 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
     JButton btnRefresh = new JButton("새로고침");
     JButton btnClose = new JButton("닫기");
+    ThemeManager.disableButtonPressedEffect(btnRefresh);
+    ThemeManager.disableButtonPressedEffect(btnClose);
     btnRefresh.addActionListener(e -> resetAndLoad());
     btnClose.addActionListener(e -> dispose());
     bottom.add(btnRefresh);
@@ -153,6 +158,11 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
   
   private void applyTheme() {
     boolean isDarkMode = themeManager.isDarkMode();
+    
+    // JOptionPane 배경색 설정
+    UIManager.put("OptionPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
     
     try {
       // 프레임 배경
@@ -339,7 +349,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     );
     JLabel metaLabel = new JLabel(meta);
     metaLabel.setFont(metaLabel.getFont().deriveFont(11f));
-    metaLabel.setForeground(isDarkMode ? ThemeManager.TEXT_DIM : ThemeManager.LIGHT_BORDER);
+    metaLabel.setForeground(isDarkMode ? ThemeManager.TEXT_DIM : ThemeManager.TEXT_DARK);
 
     JPanel center = new JPanel(new BorderLayout(4, 4));
     center.setOpaque(false);
@@ -436,10 +446,12 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     centerPanel.setBorder(new EmptyBorder(4, 8, 8, 8));
     centerPanel.add(contentScroll);
     centerPanel.add(Box.createVerticalStrut(8));
-    centerPanel.add(new JLabel("댓글 목록"));
+    JLabel commentListLabel = new JLabel("댓글 목록");
+    centerPanel.add(commentListLabel);
     centerPanel.add(commentScroll);
     centerPanel.add(Box.createVerticalStrut(8));
-    centerPanel.add(new JLabel("새 댓글"));
+    JLabel newCommentLabel = new JLabel("새 댓글");
+    centerPanel.add(newCommentLabel);
     centerPanel.add(newCommentScroll);
 
     dialog.add(infoLabel, BorderLayout.NORTH);
@@ -453,6 +465,13 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JButton btnComment = new JButton("댓글 등록");
     JButton btnReport = new JButton("신고");
     JButton btnClose = new JButton("닫기");
+    
+    ThemeManager.disableButtonPressedEffect(btnLike);
+    ThemeManager.disableButtonPressedEffect(btnDislike);
+    ThemeManager.disableButtonPressedEffect(btnEdit);
+    ThemeManager.disableButtonPressedEffect(btnComment);
+    ThemeManager.disableButtonPressedEffect(btnReport);
+    ThemeManager.disableButtonPressedEffect(btnClose);
 
     if (!isOwner) {
       btnEdit.setEnabled(false);
@@ -568,60 +587,125 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         return;
       }
 
+      JDialog reportDialog = new JDialog(dialog, "게시글 신고", true);
+      reportDialog.setSize(500, 300);
+      reportDialog.setLocationRelativeTo(dialog);
+      reportDialog.setLayout(new BorderLayout());
+
       JTextArea taReason = new JTextArea(5, 30);
       taReason.setLineWrap(true);
       taReason.setWrapStyleWord(true);
 
       JPanel panel = new JPanel(new BorderLayout(8, 8));
-      panel.add(new JLabel("신고 사유를 입력하세요:"), BorderLayout.NORTH);
-      panel.add(new JScrollPane(taReason), BorderLayout.CENTER);
+      panel.setBorder(new EmptyBorder(8, 8, 8, 8));
+      JLabel reasonLabel = new JLabel("신고 사유를 입력하세요:");
+      panel.add(reasonLabel, BorderLayout.NORTH);
+      JScrollPane reasonScroll = new JScrollPane(taReason);
+      panel.add(reasonScroll, BorderLayout.CENTER);
 
-      int res = JOptionPane.showConfirmDialog(
-          dialog,
-          panel,
-          "게시글 신고",
-          JOptionPane.OK_CANCEL_OPTION,
-          JOptionPane.PLAIN_MESSAGE
-      );
-      if (res != JOptionPane.OK_OPTION) {
-        return;
-      }
-
-      String reason = taReason.getText();
-      if (reason == null || reason.trim().isEmpty()) {
-        JOptionPane.showMessageDialog(dialog,
-            "신고 사유를 입력하세요.",
-            "알림", JOptionPane.INFORMATION_MESSAGE);
-        return;
-      }
-
-      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-      new SwingWorker<Void, Void>() {
-        @Override
-        protected Void doInBackground() {
-          reportService.reportPost(user, p, reason.trim());
-          return null;
+      JButton okButton = new JButton("확인");
+      JButton cancelButton = new JButton("취소");
+      ThemeManager.disableButtonPressedEffect(okButton);
+      ThemeManager.disableButtonPressedEffect(cancelButton);
+      
+      okButton.addActionListener(ev -> {
+        String reason = taReason.getText();
+        if (reason == null || reason.trim().isEmpty()) {
+          JOptionPane.showMessageDialog(reportDialog,
+              "신고 사유를 입력하세요.",
+              "알림", JOptionPane.INFORMATION_MESSAGE);
+          return;
         }
-
-        @Override
-        protected void done() {
-          setCursor(Cursor.getDefaultCursor());
-          try {
-            get(); // 예외 전파
-            JOptionPane.showMessageDialog(dialog,
-                "신고가 접수되었습니다.",
-                "알림", JOptionPane.INFORMATION_MESSAGE);
-            btnReport.setEnabled(false);
-            btnReport.setText("신고 완료");
-          } catch (Exception ex) {
-            Throwable cause = ex.getCause();
-            String msg = (cause != null ? cause.getMessage() : ex.getMessage());
-            JOptionPane.showMessageDialog(dialog,
-                "신고 처리 실패: " + msg,
-                "오류", JOptionPane.ERROR_MESSAGE);
+        reportDialog.dispose();
+        
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new SwingWorker<Void, Void>() {
+          @Override
+          protected Void doInBackground() {
+            reportService.reportPost(user, p, reason.trim());
+            return null;
           }
+
+          @Override
+          protected void done() {
+            setCursor(Cursor.getDefaultCursor());
+            try {
+              get(); // 예외 전파
+              JOptionPane.showMessageDialog(dialog,
+                  "신고가 접수되었습니다.",
+                  "알림", JOptionPane.INFORMATION_MESSAGE);
+              btnReport.setEnabled(false);
+              btnReport.setText("신고 완료");
+            } catch (Exception ex) {
+              Throwable cause = ex.getCause();
+              String msg = (cause != null ? cause.getMessage() : ex.getMessage());
+              JOptionPane.showMessageDialog(dialog,
+                  "신고 처리 실패: " + msg,
+                  "오류", JOptionPane.ERROR_MESSAGE);
+            }
+          }
+        }.execute();
+      });
+      
+      cancelButton.addActionListener(ev -> reportDialog.dispose());
+
+      JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+      buttonPanel.add(cancelButton);
+      buttonPanel.add(okButton);
+
+      reportDialog.add(panel, BorderLayout.CENTER);
+      reportDialog.add(buttonPanel, BorderLayout.SOUTH);
+
+      // 테마 적용 함수
+      Runnable applyReportDialogTheme = () -> {
+        boolean isDarkMode = themeManager.isDarkMode();
+        
+        reportDialog.getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        panel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        buttonPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        
+        reasonLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        
+        taReason.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        taReason.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        taReason.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        
+        reasonScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        reasonScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        
+        okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        okButton.setBorder(BorderFactory.createLineBorder(
+          isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        ThemeManager.disableButtonPressedEffect(okButton);
+        
+        cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        cancelButton.setBorder(BorderFactory.createLineBorder(
+          isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        ThemeManager.disableButtonPressedEffect(cancelButton);
+        
+        reportDialog.repaint();
+      };
+      
+      ThemeManager.ThemeChangeListener reportDialogThemeListener = () -> applyReportDialogTheme.run();
+      themeManager.addThemeChangeListener(reportDialogThemeListener);
+      
+      reportDialog.addWindowListener(new java.awt.event.WindowAdapter() {
+        @Override
+        public void windowClosed(java.awt.event.WindowEvent e) {
+          themeManager.removeThemeChangeListener(reportDialogThemeListener);
         }
-      }.execute();
+      });
+      
+      applyReportDialogTheme.run();
+      reportDialog.setVisible(true);
+      
+      // 다이얼로그가 닫힌 후 처리
+      if (!reportDialog.isVisible()) {
+        return;
+      }
+
     });
 
     btnClose.addActionListener(e -> dialog.dispose());
@@ -635,11 +719,121 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     bottomPanel.add(btnClose);
     dialog.add(bottomPanel, BorderLayout.SOUTH);
 
+    // 테마 적용 함수
+    Runnable applyDialogTheme = () -> {
+      boolean isDarkMode = themeManager.isDarkMode();
+      
+      // 다이얼로그 배경
+      dialog.getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      // 정보 라벨 (다크모드: 흰색, 라이트모드: 검정색)
+      infoLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      // 라벨들 (다크모드: 흰색, 라이트모드: 검정색)
+      commentListLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      newCommentLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      // 텍스트 영역들
+      contentArea.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      contentArea.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      contentArea.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      commentArea.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      commentArea.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      commentArea.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      newCommentArea.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      newCommentArea.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      newCommentArea.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      // 스크롤 패널들
+      contentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      contentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      commentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      commentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      newCommentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      newCommentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      
+      // 중앙 패널
+      centerPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      // 버튼들 (다크모드: 흰색, 라이트모드: 검정색)
+      btnLike.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnLike.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnLike.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnLike.setFocusPainted(false);
+      
+      btnDislike.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnDislike.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnDislike.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnDislike.setFocusPainted(false);
+      
+      btnEdit.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnEdit.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnEdit.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnEdit.setFocusPainted(false);
+      
+      btnComment.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnComment.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnComment.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnComment.setFocusPainted(false);
+      ThemeManager.disableButtonPressedEffect(btnComment);
+      
+      btnReport.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnReport.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnReport.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnReport.setFocusPainted(false);
+      ThemeManager.disableButtonPressedEffect(btnReport);
+      
+      btnClose.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      btnClose.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      btnClose.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
+      ));
+      btnClose.setFocusPainted(false);
+      ThemeManager.disableButtonPressedEffect(btnClose);
+      
+      // 하단 패널
+      bottomPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      dialog.repaint();
+    };
+    
+    // 테마 변경 리스너 등록
+    ThemeManager.ThemeChangeListener dialogThemeListener = () -> applyDialogTheme.run();
+    themeManager.addThemeChangeListener(dialogThemeListener);
+    
+    // 다이얼로그가 닫힐 때 리스너 제거
+    dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+      @Override
+      public void windowClosed(java.awt.event.WindowEvent e) {
+        themeManager.removeThemeChangeListener(dialogThemeListener);
+      }
+    });
+    
+    // 초기 테마 적용
+    applyDialogTheme.run();
+
     dialog.setVisible(true);
   }
 
   /** 새 글 작성 */
   private void openNewPostDialog() {
+    JDialog dialog = new JDialog(this, "새 글 작성", true);
+    dialog.setSize(600, 500);
+    dialog.setLocationRelativeTo(this);
+    dialog.setLayout(new BorderLayout());
+
     JTextField tfTitle = new JTextField();
     JTextArea taContent = new JTextArea(10, 40);
     taContent.setLineWrap(true);
@@ -647,37 +841,108 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
 
     JPanel panel = new JPanel(new BorderLayout(8, 8));
     JPanel north = new JPanel(new BorderLayout(8, 8));
-    north.add(new JLabel("제목"), BorderLayout.WEST);
+    JLabel titleLabel = new JLabel("제목");
+    north.add(titleLabel, BorderLayout.WEST);
     north.add(tfTitle, BorderLayout.CENTER);
     panel.add(north, BorderLayout.NORTH);
-    panel.add(new JScrollPane(taContent), BorderLayout.CENTER);
+    JScrollPane contentScroll = new JScrollPane(taContent);
+    panel.add(contentScroll, BorderLayout.CENTER);
     panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-    int ok = JOptionPane.showConfirmDialog(this, panel, "새 글 작성",
-        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-    if (ok != JOptionPane.OK_OPTION) return;
+    JButton okButton = new JButton("확인");
+    JButton cancelButton = new JButton("취소");
+    ThemeManager.disableButtonPressedEffect(okButton);
+    ThemeManager.disableButtonPressedEffect(cancelButton);
+    
+    okButton.addActionListener(e -> {
+      String title = tfTitle.getText();
+      String content = taContent.getText();
+      dialog.dispose();
+      
+      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+      new SwingWorker<Void, Void>() {
+        @Override
+        protected Void doInBackground() {
+          postService.create(user, boardName, title, content);
+          return null;
+        }
 
-    String title = tfTitle.getText();
-    String content = taContent.getText();
+        @Override
+        protected void done() {
+          setCursor(Cursor.getDefaultCursor());
+          resetAndLoad();
+        }
+      }.execute();
+    });
+    
+    cancelButton.addActionListener(e -> dialog.dispose());
 
-    setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-    new SwingWorker<Void, Void>() {
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+    buttonPanel.add(cancelButton);
+    buttonPanel.add(okButton);
+
+    dialog.add(panel, BorderLayout.CENTER);
+    dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+    // 테마 적용 함수
+    Runnable applyDialogTheme = () -> {
+      boolean isDarkMode = themeManager.isDarkMode();
+      
+      dialog.getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      panel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      north.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      buttonPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      titleLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      tfTitle.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      tfTitle.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      tfTitle.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      
+      taContent.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      taContent.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      taContent.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      contentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      contentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      
+      okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      okButton.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.disableButtonPressedEffect(okButton);
+      
+      cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      cancelButton.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.disableButtonPressedEffect(cancelButton);
+      
+      dialog.repaint();
+    };
+    
+    ThemeManager.ThemeChangeListener dialogThemeListener = () -> applyDialogTheme.run();
+    themeManager.addThemeChangeListener(dialogThemeListener);
+    
+    dialog.addWindowListener(new java.awt.event.WindowAdapter() {
       @Override
-      protected Void doInBackground() {
-        postService.create(user, boardName, title, content);
-        return null;
+      public void windowClosed(java.awt.event.WindowEvent e) {
+        themeManager.removeThemeChangeListener(dialogThemeListener);
       }
-
-      @Override
-      protected void done() {
-        setCursor(Cursor.getDefaultCursor());
-        resetAndLoad();
-      }
-    }.execute();
+    });
+    
+    applyDialogTheme.run();
+    dialog.setVisible(true);
   }
 
   /** 게시글 수정 (본인 글만) */
   private void openEditPostDialog(Post p) {
+    JDialog dialog = new JDialog(this, "게시글 수정", true);
+    dialog.setSize(600, 500);
+    dialog.setLocationRelativeTo(this);
+    dialog.setLayout(new BorderLayout());
+
     JTextField tfTitle = new JTextField(p.title);
     JTextArea taContent = new JTextArea(p.content, 10, 40);
     taContent.setLineWrap(true);
@@ -685,33 +950,99 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
 
     JPanel panel = new JPanel(new BorderLayout(8, 8));
     JPanel north = new JPanel(new BorderLayout(8, 8));
-    north.add(new JLabel("제목"), BorderLayout.WEST);
+    JLabel titleLabel = new JLabel("제목");
+    north.add(titleLabel, BorderLayout.WEST);
     north.add(tfTitle, BorderLayout.CENTER);
     panel.add(north, BorderLayout.NORTH);
-    panel.add(new JScrollPane(taContent), BorderLayout.CENTER);
+    JScrollPane contentScroll = new JScrollPane(taContent);
+    panel.add(contentScroll, BorderLayout.CENTER);
     panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-    int ok = JOptionPane.showConfirmDialog(this, panel, "게시글 수정",
-        JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-    if (ok != JOptionPane.OK_OPTION) return;
+    JButton okButton = new JButton("확인");
+    JButton cancelButton = new JButton("취소");
+    ThemeManager.disableButtonPressedEffect(okButton);
+    ThemeManager.disableButtonPressedEffect(cancelButton);
+    
+    okButton.addActionListener(e -> {
+      String newTitle = tfTitle.getText();
+      String newContent = taContent.getText();
+      dialog.dispose();
+      
+      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+      new SwingWorker<Void, Void>() {
+        @Override
+        protected Void doInBackground() {
+          postService.update(p, newTitle, newContent);
+          return null;
+        }
 
-    String newTitle = tfTitle.getText();
-    String newContent = taContent.getText();
+        @Override
+        protected void done() {
+          setCursor(Cursor.getDefaultCursor());
+          resetAndLoad();
+        }
+      }.execute();
+    });
+    
+    cancelButton.addActionListener(e -> dialog.dispose());
 
-    setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-    new SwingWorker<Void, Void>() {
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+    buttonPanel.add(cancelButton);
+    buttonPanel.add(okButton);
+
+    dialog.add(panel, BorderLayout.CENTER);
+    dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+    // 테마 적용 함수
+    Runnable applyDialogTheme = () -> {
+      boolean isDarkMode = themeManager.isDarkMode();
+      
+      dialog.getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      panel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      north.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      buttonPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      titleLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      tfTitle.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      tfTitle.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      tfTitle.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      
+      taContent.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      taContent.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      taContent.setCaretColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      
+      contentScroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      contentScroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      
+      okButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      okButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      okButton.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.disableButtonPressedEffect(okButton);
+      
+      cancelButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      cancelButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      cancelButton.setBorder(BorderFactory.createLineBorder(
+        isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.disableButtonPressedEffect(cancelButton);
+      
+      dialog.repaint();
+    };
+    
+    ThemeManager.ThemeChangeListener dialogThemeListener = () -> applyDialogTheme.run();
+    themeManager.addThemeChangeListener(dialogThemeListener);
+    
+    dialog.addWindowListener(new java.awt.event.WindowAdapter() {
       @Override
-      protected Void doInBackground() {
-        postService.update(p, newTitle, newContent);
-        return null;
+      public void windowClosed(java.awt.event.WindowEvent e) {
+        themeManager.removeThemeChangeListener(dialogThemeListener);
       }
-
-      @Override
-      protected void done() {
-        setCursor(Cursor.getDefaultCursor());
-        resetAndLoad();
-      }
-    }.execute();
+    });
+    
+    applyDialogTheme.run();
+    dialog.setVisible(true);
   }
 
   /** 등록일시 포맷 */

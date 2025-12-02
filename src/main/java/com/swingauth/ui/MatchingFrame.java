@@ -35,6 +35,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
         // 상단: 종료 버튼
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton exitButton = new JButton("← 종료");
+        ThemeManager.disableButtonPressedEffect(exitButton);
         exitButton.addActionListener(e -> closeWindow());
         topPanel.add(exitButton);
         add(topPanel, BorderLayout.NORTH);
@@ -56,6 +57,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
         startButton.setBackground(ThemeManager.NEON_CYAN);
         startButton.setForeground(ThemeManager.DARK_BG);
         startButton.setFocusPainted(false);
+        ThemeManager.disableButtonPressedEffect(startButton);
         startButton.addActionListener(e -> startMatching());
         gbc.gridy = 1;
         centerPanel.add(startButton, gbc);
@@ -65,6 +67,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
         endButton.setBackground(ThemeManager.NEON_PINK);
         endButton.setForeground(Color.WHITE);
         endButton.setFocusPainted(false);
+        ThemeManager.disableButtonPressedEffect(endButton);
         endButton.setEnabled(false);
         endButton.setVisible(false); // 초기에는 숨김
         endButton.addActionListener(e -> endMatching());
@@ -99,6 +102,11 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
     private void applyTheme() {
         boolean isDarkMode = themeManager.isDarkMode();
         
+        // JOptionPane 배경색 설정
+        UIManager.put("OptionPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        
         getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
         
         JPanel topPanel = (JPanel) getContentPane().getComponent(0);
@@ -120,12 +128,15 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
             endButton.setBackground(ThemeManager.LIGHT_PINK);
             endButton.setForeground(Color.WHITE);
         }
+        ThemeManager.disableButtonPressedEffect(startButton);
+        ThemeManager.disableButtonPressedEffect(endButton);
         
         JButton exitButton = (JButton) topPanel.getComponent(0);
         exitButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
         exitButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
         exitButton.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        ThemeManager.disableButtonPressedEffect(exitButton);
         
         SwingUtilities.updateComponentTreeUI(this);
     }

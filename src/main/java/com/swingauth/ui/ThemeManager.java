@@ -1,5 +1,6 @@
 package com.swingauth.ui;
 
+import javax.swing.JButton;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,26 @@ public class ThemeManager {
         for (ThemeChangeListener listener : listeners) {
             listener.onThemeChanged();
         }
+    }
+    
+    /**
+     * 버튼의 클릭 시 색상 변경 효과를 제거합니다.
+     */
+    public static void disableButtonPressedEffect(JButton button) {
+        button.setRolloverEnabled(false);
+        button.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
+            @Override
+            protected void paintButtonPressed(java.awt.Graphics g, javax.swing.AbstractButton b) {
+                // pressed 상태 그리기 무시
+            }
+        });
+        // 모델을 커스텀하여 rollover 상태 무시
+        button.setModel(new javax.swing.DefaultButtonModel() {
+            @Override
+            public boolean isRollover() {
+                return false; // 항상 rollover 상태가 아니도록
+            }
+        });
     }
 }
 

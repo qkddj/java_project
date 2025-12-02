@@ -60,6 +60,7 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
         // 상단: 매칭 종료 버튼
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton exitButton = new JButton("← 매칭 종료");
+        ThemeManager.disableButtonPressedEffect(exitButton);
         exitButton.addActionListener(e -> closeWindow());
         topPanel.add(exitButton);
         add(topPanel, BorderLayout.NORTH);
@@ -166,6 +167,7 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
         sendButton = new JButton("보내기");
         sendButton.setPreferredSize(new Dimension(80, 35));
         sendButton.setEnabled(false);
+        ThemeManager.disableButtonPressedEffect(sendButton);
         sendButton.addActionListener(e -> sendMessage());
         inputPanel.add(sendButton, BorderLayout.WEST);
 
@@ -236,6 +238,11 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
     private void applyTheme() {
         boolean isDarkMode = themeManager.isDarkMode();
         
+        // JOptionPane 배경색 설정
+        UIManager.put("OptionPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        
         getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
         
         JPanel topPanel = (JPanel) getContentPane().getComponent(0);
@@ -258,12 +265,14 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
         sendButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
         sendButton.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        ThemeManager.disableButtonPressedEffect(sendButton);
         
         JButton exitButton = (JButton) topPanel.getComponent(0);
         exitButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
         exitButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
         exitButton.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        ThemeManager.disableButtonPressedEffect(exitButton);
         
         JScrollPane scrollPane = (JScrollPane) getContentPane().getComponent(1);
         scrollPane.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
