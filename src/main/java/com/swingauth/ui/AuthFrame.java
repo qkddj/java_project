@@ -11,7 +11,7 @@ public class AuthFrame extends JFrame {
   private static final Color NEON_CYAN = new Color(0, 255, 255);
   private static final Color NEON_GREEN = new Color(57, 255, 20);
   private static final Color NEON_PINK = new Color(255, 0, 128);
-  
+
   private final AuthService auth = new AuthService();
 
   public AuthFrame() {
@@ -30,11 +30,10 @@ public class AuthFrame extends JFrame {
       private static final Color DARK_BG = new Color(18, 18, 24);
       private static final Color DARK_BG2 = new Color(28, 28, 36);
       private static final Color TEXT_LIGHT = new Color(240, 240, 255);
-      
+
       @Override
       protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
-          int x, int y, int w, int h, boolean isSelected) {
-        // 선택된 탭도 어두운 배경만 사용 - 민트색 완전히 제거
+                                        int x, int y, int w, int h, boolean isSelected) {
         if (isSelected) {
           g.setColor(DARK_BG2);
         } else {
@@ -42,22 +41,21 @@ public class AuthFrame extends JFrame {
         }
         g.fillRect(x, y, w, h);
       }
-      
+
       @Override
       protected void paintTabBorder(Graphics g, int tabPlacement, int tabIndex,
-          int x, int y, int w, int h, boolean isSelected) {
+                                    int x, int y, int w, int h, boolean isSelected) {
         // 탭 테두리 제거
       }
-      
+
       @Override
       protected void paintContentBorder(Graphics g, int tabPlacement, int selectedIndex) {
         // 콘텐츠 영역 테두리 제거
       }
-      
+
       @Override
       protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
-          int tabIndex, String title, Rectangle textRect, boolean isSelected) {
-        // 텍스트 색상 설정
+                               int tabIndex, String title, Rectangle textRect, boolean isSelected) {
         g.setColor(TEXT_LIGHT);
         super.paintText(g, tabPlacement, font, metrics, tabIndex, title, textRect, isSelected);
       }
@@ -157,7 +155,8 @@ public class AuthFrame extends JFrame {
         @Override protected User doInBackground() {
           try {
             return auth.login(username.getText(), new String(password.getPassword()));
-          } catch (IllegalArgumentException ex) {
+          } catch (IllegalArgumentException | IllegalStateException ex) {
+            // 아이디 없음, 비밀번호 오류, 정지 계정 등
             status.setText("로그인 실패: " + ex.getMessage());
             status.setForeground(NEON_PINK);
             return null;
