@@ -16,6 +16,27 @@
             --dark-border: #3C3C50;
             --text-light: #F0F0FF;
             --text-dim: #A0A0B4;
+            
+            /* 라이트 테마 색상 */
+            --light-bg: #F5F5FA;
+            --light-bg2: #FFFFFF;
+            --light-bg3: #F0F0F5;
+            --light-border: #C8C8DC;
+            --text-dark: #1E1E28;
+            --light-cyan: #00B4C8;
+            --light-pink: #C80064;
+        }
+        
+        /* 라이트 모드 변수 오버라이드 */
+        body.light-mode {
+            --dark-bg: var(--light-bg);
+            --dark-bg2: var(--light-bg2);
+            --dark-bg3: var(--light-bg3);
+            --dark-border: var(--light-border);
+            --text-light: var(--text-dark);
+            --text-dim: var(--light-border);
+            --neon-cyan: var(--light-cyan);
+            --neon-pink: var(--light-pink);
         }
         
         * {
@@ -335,7 +356,7 @@
 <body>
 <header>
     <div class="header-nav">
-        <button class="btn-back" id="btnBack">← 메인으로 나가기</button>
+        <button class="btn-back" id="btnBack" onclick="handleBackClick(event)">← 메인으로 나가기</button>
         <span>랜덤 영상통화</span>
     </div>
 </header>
@@ -346,12 +367,12 @@
             <span id="status">Idle</span>
         </div>
         <div class="row">
-            <button id="btnStart" class="primary">매칭 시작</button>
+            <button id="btnStart" class="primary" onclick="handleStartClick(event)">매칭 시작</button>
         </div>
         <div class="row">
-            <button id="btnMute">마이크 토글</button>
-            <button id="btnCamera">카메라 토글</button>
-            <button id="btnHangup" class="hidden">통화 종료</button>
+            <button id="btnMute" onclick="handleMuteClick(event)">마이크 토글</button>
+            <button id="btnCamera" onclick="handleCameraClick(event)">카메라 토글</button>
+            <button id="btnHangup" class="hidden" onclick="handleHangupClick(event)">통화 종료</button>
         </div>
     </section>
 
@@ -386,7 +407,42 @@
     </div>
 </div>
 
-<script src="app.js"></script>
+<script>
+    // URL 파라미터에서 테마 정보 읽기 (전역 변수로 선언하여 app.js에서도 사용)
+    window.urlParams = new URLSearchParams(window.location.search);
+    const theme = window.urlParams.get('theme') || 'dark';
+    
+    // 테마 적용
+    if (theme === 'light') {
+        document.body.classList.add('light-mode');
+    } else {
+        document.body.classList.remove('light-mode');
+    }
+    
+    // localStorage에 테마 저장 (다음 접속 시에도 유지)
+    localStorage.setItem('videoCallTheme', theme);
+    
+    console.log('[video-call.html] 테마 적용 완료:', theme);
+    console.log('[video-call.html] urlParams 전역 변수 설정 완료');
+</script>
+<script src="app.js" onerror="console.error('app.js 로드 실패!')"></script>
+<script>
+    // app.js가 로드된 후 확인
+    window.addEventListener('load', () => {
+        console.log('[video-call.html] 페이지 로드 완료');
+        console.log('[video-call.html] setupButtons 함수 존재:', typeof setupButtons !== 'undefined');
+        
+        // setupButtons가 없으면 직접 호출 시도
+        if (typeof setupButtons === 'function') {
+            console.log('[video-call.html] setupButtons 직접 호출');
+            setTimeout(() => {
+                setupButtons();
+            }, 500);
+        } else {
+            console.error('[video-call.html] setupButtons 함수를 찾을 수 없습니다!');
+        }
+    });
+</script>
 </body>
 </html>
 

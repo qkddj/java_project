@@ -13,14 +13,21 @@ import java.nio.file.Paths;
 public class VideoCallFrame extends JFrame {
     private final ServerLauncher serverLauncher;
     private final User user;
+    private final boolean isDarkMode;
 
     public VideoCallFrame() {
-        this(null);
+        this(null, true);
     }
 
-    public VideoCallFrame(User user) {
+    public VideoCallFrame(User user, boolean isDarkMode) {
+        super(); // JFrame 초기화
         this.user = user;
+        this.isDarkMode = isDarkMode;
         serverLauncher = ServerLauncher.getInstance();
+        
+        // 창을 보이지 않게 설정 (브라우저만 열기)
+        setVisible(false);
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         
         // 서버가 실행 중이 아니면 시작
         try {
@@ -52,7 +59,20 @@ public class VideoCallFrame extends JFrame {
             }
             
             // 서버 시작 (이미 실행 중이면 그대로 사용)
-            serverLauncher.start();
+            try {
+                serverLauncher.start();
+                System.out.println("[VideoCallFrame] 서버 시작 완료");
+            } catch (Exception startEx) {
+                System.err.println("[VideoCallFrame] 서버 시작 실패: " + startEx.getMessage());
+                startEx.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this, 
+                        "서버 시작 실패: " + startEx.getMessage() + "\n자세한 내용은 콘솔을 확인하세요.", 
+                        "서버 시작 오류", JOptionPane.ERROR_MESSAGE);
+                });
+                dispose();
+                return;
+            }
             
             // 포트 가져오기 (서버가 완전히 시작될 때까지 대기)
             int currentPort = waitForPort();
@@ -60,9 +80,12 @@ public class VideoCallFrame extends JFrame {
             System.out.println("[VideoCallFrame] 가져온 포트: " + currentPort);
             
             if (currentPort == 0) {
-                JOptionPane.showMessageDialog(null, 
-                    "서버 포트를 가져올 수 없습니다.\n서버가 시작 중일 수 있습니다. 잠시 후 다시 시도해주세요.", 
-                    "오류", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this, 
+                        "서버 포트를 가져올 수 없습니다.\n서버가 시작 중일 수 있습니다. 잠시 후 다시 시도해주세요.", 
+                        "오류", JOptionPane.ERROR_MESSAGE);
+                });
+                dispose();
                 return;
             }
             
@@ -86,25 +109,32 @@ public class VideoCallFrame extends JFrame {
                 StringBuilder urlBuilder = new StringBuilder();
                 urlBuilder.append("http://").append(hostAddress).append(":").append(port).append("/video-call.html");
                 
-                // 실제 username을 URL 파라미터로 전달
+                // 실제 username과 테마 정보를 URL 파라미터로 전달
                 urlBuilder.append("?username=").append(java.net.URLEncoder.encode(actualUsername, "UTF-8"));
+                urlBuilder.append("&theme=").append(isDarkMode ? "dark" : "light");
                 
                 String url = urlBuilder.toString();
                 System.out.println("[VideoCallFrame] 실제 생성된 URL: " + url);
                 URI uri = new URI(url);
                 Desktop.getDesktop().browse(uri);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(null, 
-                    "브라우저를 열 수 없습니다: " + ex.getMessage(), 
-                    "오류", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this, 
+                        "브라우저를 열 수 없습니다: " + ex.getMessage(), 
+                        "오류", JOptionPane.ERROR_MESSAGE);
+                });
                 ex.printStackTrace();
+                dispose();
             }
         });
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, 
-                "서버 시작 실패: " + e.getMessage(), 
-                "오류", JOptionPane.ERROR_MESSAGE);
+            SwingUtilities.invokeLater(() -> {
+                JOptionPane.showMessageDialog(this, 
+                    "서버 시작 실패: " + e.getMessage(), 
+                    "오류", JOptionPane.ERROR_MESSAGE);
+            });
             e.printStackTrace();
+            dispose();
         }
     }
     

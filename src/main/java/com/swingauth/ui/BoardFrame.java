@@ -14,17 +14,9 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class BoardFrame extends JFrame {
+public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListener {
 
-  // 사이버펑크 네온 다크 테마 색상
-  private static final Color NEON_CYAN = new Color(0, 255, 255);
-  private static final Color NEON_PURPLE = new Color(191, 64, 255);
-  private static final Color DARK_BG = new Color(18, 18, 24);
-  private static final Color DARK_BG2 = new Color(28, 28, 36);
-  private static final Color DARK_BORDER = new Color(60, 60, 80);
-  private static final Color TEXT_LIGHT = new Color(240, 240, 255);
-  private static final Color TEXT_DIM = new Color(160, 160, 180);
-
+  private final ThemeManager themeManager = ThemeManager.getInstance();
   private final User user;
   private final String boardName;
 
@@ -112,7 +104,7 @@ public class BoardFrame extends JFrame {
     cardsPanel = new JPanel();
     cardsPanel.setLayout(new BoxLayout(cardsPanel, BoxLayout.Y_AXIS));
     cardsPanel.setBorder(new EmptyBorder(8, 12, 8, 12));
-    cardsPanel.setBackground(DARK_BG); // 배경색 설정
+    cardsPanel.setBackground(ThemeManager.DARK_BG); // 배경색 설정
     cardsPanel.setOpaque(true); // 윈도우에서 겹침 문제 해결
 
     scrollPane = new JScrollPane(cardsPanel);
@@ -143,6 +135,108 @@ public class BoardFrame extends JFrame {
 
     // 첫 로딩
     resetAndLoad();
+    
+    // ThemeManager에 리스너 등록
+    themeManager.addThemeChangeListener(this);
+    
+    // 초기 테마 적용
+    applyTheme();
+  }
+  
+  @Override
+  public void onThemeChanged() {
+    applyTheme();
+    // 카드 목록도 다시 그리기
+    cardsPanel.revalidate();
+    cardsPanel.repaint();
+  }
+  
+  private void applyTheme() {
+    boolean isDarkMode = themeManager.isDarkMode();
+    
+    try {
+      // 프레임 배경
+      getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      // 상단 패널
+      if (getContentPane().getComponentCount() > 0) {
+        Component northComp = getContentPane().getComponent(0);
+        if (northComp instanceof JPanel) {
+          JPanel northPanel = (JPanel) northComp;
+          northPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+          if (northPanel.getComponentCount() > 0) {
+            Component topComp = northPanel.getComponent(0);
+            if (topComp instanceof JPanel) {
+              ((JPanel) topComp).setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+            }
+          }
+          if (northPanel.getComponentCount() > 1) {
+            Component searchComp = northPanel.getComponent(1);
+            if (searchComp instanceof JPanel) {
+              ((JPanel) searchComp).setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+            }
+          }
+        }
+      }
+      
+      // 카드 패널 배경
+      cardsPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      
+      // 하단 패널
+      if (getContentPane().getComponentCount() > 2) {
+        Component bottomComp = getContentPane().getComponent(2);
+        if (bottomComp instanceof JPanel) {
+          ((JPanel) bottomComp).setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        }
+      }
+      
+      // 모든 컴포넌트 재색칠
+      updateAllComponents(this, isDarkMode);
+    } catch (Exception e) {
+      // 컴포넌트 접근 실패 시 무시
+      System.err.println("테마 적용 중 오류: " + e.getMessage());
+    }
+  }
+  
+  private void updateAllComponents(Container container, boolean isDarkMode) {
+    for (Component comp : container.getComponents()) {
+      if (comp instanceof JPanel) {
+        JPanel panel = (JPanel) comp;
+        if (panel.isOpaque()) {
+          panel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        }
+        updateAllComponents(panel, isDarkMode);
+      } else if (comp instanceof JLabel) {
+        JLabel label = (JLabel) comp;
+        if (label.getForeground().equals(ThemeManager.TEXT_LIGHT) || 
+            label.getForeground().equals(ThemeManager.TEXT_DIM) ||
+            label.getForeground().equals(ThemeManager.TEXT_DARK)) {
+          label.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        }
+      } else if (comp instanceof JTextField) {
+        JTextField field = (JTextField) comp;
+        field.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        field.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        field.setBorder(BorderFactory.createLineBorder(
+            isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      } else if (comp instanceof JTextArea) {
+        JTextArea area = (JTextArea) comp;
+        area.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        area.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+      } else if (comp instanceof JButton) {
+        JButton btn = (JButton) comp;
+        btn.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        btn.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        btn.setBorder(BorderFactory.createLineBorder(
+            isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+      } else if (comp instanceof JScrollPane) {
+        JScrollPane scroll = (JScrollPane) comp;
+        scroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        scroll.getViewport().setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+      } else if (comp instanceof Container) {
+        updateAllComponents((Container) comp, isDarkMode);
+      }
+    }
   }
 
   private void resetAndLoad() {
@@ -215,11 +309,12 @@ public class BoardFrame extends JFrame {
     Post p = data.post;
 
     JPanel card = new JPanel(new BorderLayout(8, 4));
+    boolean isDarkMode = themeManager.isDarkMode();
     card.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(DARK_BORDER),
+        BorderFactory.createLineBorder(isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER),
         new EmptyBorder(8, 8, 8, 8)
     ));
-    card.setBackground(DARK_BG2);
+    card.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
     card.setOpaque(true); // 윈도우에서 렌더링 문제 해결을 위해 명시적으로 설정
 
     int CARD_HEIGHT = 80;
@@ -228,10 +323,12 @@ public class BoardFrame extends JFrame {
 
     JLabel titleLabel = new JLabel(p.title != null ? p.title : "(제목 없음)");
     titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
+    titleLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
 
     String body = p.content != null ? p.content : "";
     String summary = body.length() > 30 ? body.substring(0, 30) + "..." : body;
     JLabel summaryLabel = new JLabel(summary);
+    summaryLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
 
     String timeStr = formatCreatedAt(p.createdAt);
     String meta = String.format("댓글 %d  |  좋아요 %d  |  %s  |  %s",
@@ -242,7 +339,7 @@ public class BoardFrame extends JFrame {
     );
     JLabel metaLabel = new JLabel(meta);
     metaLabel.setFont(metaLabel.getFont().deriveFont(11f));
-    metaLabel.setForeground(TEXT_DIM);
+    metaLabel.setForeground(isDarkMode ? ThemeManager.TEXT_DIM : ThemeManager.LIGHT_BORDER);
 
     JPanel center = new JPanel(new BorderLayout(4, 4));
     center.setOpaque(false);
@@ -260,20 +357,30 @@ public class BoardFrame extends JFrame {
 
       @Override
       public void mouseEntered(java.awt.event.MouseEvent e) {
+        boolean isDarkMode = themeManager.isDarkMode();
         // 알파 값 사용 시 윈도우에서 텍스트 겹침 문제 발생 - 불투명 색상 사용
-        card.setBackground(new Color(20, 50, 55));
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(NEON_CYAN),
-            new EmptyBorder(8, 8, 8, 8)
-        ));
+        if (isDarkMode) {
+          card.setBackground(new Color(20, 50, 55));
+          card.setBorder(BorderFactory.createCompoundBorder(
+              BorderFactory.createLineBorder(ThemeManager.NEON_CYAN),
+              new EmptyBorder(8, 8, 8, 8)
+          ));
+        } else {
+          card.setBackground(new Color(220, 240, 250));
+          card.setBorder(BorderFactory.createCompoundBorder(
+              BorderFactory.createLineBorder(ThemeManager.LIGHT_CYAN),
+              new EmptyBorder(8, 8, 8, 8)
+          ));
+        }
         card.repaint(); // 윈도우에서 렌더링 문제 해결
       }
 
       @Override
       public void mouseExited(java.awt.event.MouseEvent e) {
-        card.setBackground(DARK_BG2);
+        boolean isDarkMode = themeManager.isDarkMode();
+        card.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
         card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(DARK_BORDER),
+            BorderFactory.createLineBorder(isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER),
             new EmptyBorder(8, 8, 8, 8)
         ));
         card.repaint(); // 윈도우에서 렌더링 문제 해결

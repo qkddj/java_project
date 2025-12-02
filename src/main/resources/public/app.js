@@ -83,9 +83,15 @@ function showHangupButton(show) {
   }
 }
 
-// URL에서 username 가져오기
-const urlParams = new URLSearchParams(location.search);
-currentUsername = urlParams.get('username') || 'unknown';
+// URL에서 username 가져오기 (HTML에서 이미 window.urlParams 선언됨)
+// HTML의 script 태그에서 이미 window.urlParams가 선언되었으므로 재사용
+if (window.urlParams) {
+  currentUsername = window.urlParams.get('username') || 'unknown';
+} else {
+  // urlParams가 없으면 새로 생성
+  window.urlParams = new URLSearchParams(location.search);
+  currentUsername = window.urlParams.get('username') || 'unknown';
+}
 console.log('[app.js] URL에서 username:', currentUsername);
 
 // userId가 설정되기 전까지 username 저장
@@ -471,128 +477,187 @@ function teardown(reason, keepLocal) {
   });
 })();
 
+// 전역 함수로 버튼 핸들러 정의 (인라인 onclick에서 사용)
+window.handleStartClick = async function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[handleStartClick] 클릭됨');
+  const btnStart = $('btnStart');
+  if (!btnStart) {
+    console.error('[handleStartClick] btnStart 요소를 찾을 수 없습니다!');
+    return;
+  }
+  
+  // 버튼 비활성화하여 중복 클릭 방지
+  btnStart.disabled = true;
+  btnStart.textContent = '권한 요청 중...';
+  
+  try {
+    // 권한 요청 (명시적으로 호출)
+    await getMedia();
+    
+    // 로컬 비디오 재생 확인
+    const lv = $('localVideo');
+    if (lv && lv.srcObject) {
+      try {
+        await lv.play();
+        console.log('로컬 비디오 재생 성공');
+      } catch (playErr) {
+        console.warn('로컬 비디오 재생 실패:', playErr);
+      }
+    }
+    
+    // HTTPS 확인 (localhost 제외)
+    if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다.\n\nHTTPS 주소로 접속해 주세요.');
+      btnStart.disabled = false;
+      btnStart.textContent = '매칭 시작';
+      return;
+    }
+    
+    // 매칭 시작
+    stayMatching = true;
+    console.log('joinQueue 전송');
+    wsSend({ type: 'joinQueue' });
+    
+    // 버튼 텍스트 변경
+    btnStart.textContent = '매칭 중...';
+  } catch (error) {
+    // 에러 메시지 표시
+    const errorMsg = error && error.message ? error.message : 
+                    (error && error.name ? `${error.name}: 권한을 허용해주세요.` : '알 수 없는 오류가 발생했습니다.');
+    alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n\n${errorMsg}`);
+    
+    // 버튼 복원
+    btnStart.disabled = false;
+    btnStart.textContent = '매칭 시작';
+    console.error('getMedia 오류:', error);
+  }
+};
+
+window.handleMuteClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[handleMuteClick] 클릭됨');
+  const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);
+  if (!track) { alert('마이크 트랙이 없습니다.'); return; }
+  track.enabled = !track.enabled;
+  alert(track.enabled ? '마이크가 켜졌습니다.' : '마이크가 꺼졌습니다.');
+};
+
+window.handleCameraClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[handleCameraClick] 클릭됨');
+  const track = (camSender && camSender.track) || (localStream && localStream.getVideoTracks()[0]);
+  if (!track) { alert('카메라 트랙이 없습니다.'); return; }
+  track.enabled = !track.enabled;
+  alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
+};
+
+window.handleHangupClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[handleHangupClick] 클릭됨');
+  stayMatching = false;
+  
+  // 즉시 원격 비디오 정리
+  const rv = $('remoteVideo');
+  if (rv && rv.srcObject) {
+    const remoteStream = rv.srcObject;
+    remoteStream.getTracks().forEach(track => {
+      track.stop();
+      track.enabled = false;
+    });
+    rv.srcObject = null;
+    rv.pause();
+  }
+  
+  if (roomId) {
+    wsSend({ type: 'endCall', roomId }); 
+  }
+  
+  // 평점 입력
+  if (partnerUsername && roomId) {
+    showRatingDialog();
+  }
+  
+  wsSend({ type: 'leaveQueue' });
+  teardown('수동 종료', false);
+  showHangupButton(false);
+  
+  // 매칭 시작 버튼 복원
+  const btnStart = $('btnStart');
+  if (btnStart) {
+    btnStart.disabled = false;
+    btnStart.textContent = '매칭 시작';
+  }
+  
+  setStatus('Idle');
+};
+
+window.handleBackClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[handleBackClick] 클릭됨');
+  // 다른 모든 창에 닫기 메시지 전송
+  if (broadcastChannel) {
+    broadcastChannel.postMessage('close-window');
+  }
+  
+  // 현재 창도 닫기
+  closeWindowAndCleanup();
+};
+
 function setupButtons() {
+  console.log('[setupButtons] 함수 호출됨');
   const btnStart = $('btnStart');
   const btnStop = $('btnStop');
   const btnHangup = $('btnHangup');
   const btnMute = $('btnMute');
   const btnCamera = $('btnCamera');
   const btnBack = $('btnBack');
+  
+  console.log('[setupButtons] 버튼 요소 확인:', {
+    btnStart: !!btnStart,
+    btnStop: !!btnStop,
+    btnHangup: !!btnHangup,
+    btnMute: !!btnMute,
+    btnCamera: !!btnCamera,
+    btnBack: !!btnBack
+  });
+  
+  // 인라인 onclick이 이미 있으므로 추가 이벤트 리스너는 선택적
 
+  // 인라인 onclick이 이미 있으므로 추가 이벤트 리스너는 선택적
   if (btnStart) {
-    btnStart.onclick = async () => {
-      // 버튼 비활성화하여 중복 클릭 방지
-      btnStart.disabled = true;
-      btnStart.textContent = '권한 요청 중...';
-      
-      try {
-        // 권한 요청 (명시적으로 호출)
-        await getMedia();
-        
-        // 로컬 비디오 재생 확인
-        const lv = $('localVideo');
-        if (lv && lv.srcObject) {
-          try {
-            await lv.play();
-            console.log('로컬 비디오 재생 성공');
-          } catch (playErr) {
-            console.warn('로컬 비디오 재생 실패:', playErr);
-          }
-        }
-        
-        // HTTPS 확인 (localhost 제외)
-        if (!isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-          alert('모바일 브라우저는 HTTPS에서만 카메라 권한을 허용합니다.\n\nHTTPS 주소로 접속해 주세요.');
-          btnStart.disabled = false;
-          btnStart.textContent = '매칭 시작';
-          return;
-        }
-        
-        // 매칭 시작
-        stayMatching = true;
-        console.log('joinQueue 전송');
-        wsSend({ type: 'joinQueue' });
-        
-        // 버튼 텍스트 변경
-        btnStart.textContent = '매칭 중...';
-      } catch (e) {
-        // 에러 메시지 표시
-        const errorMsg = e && e.message ? e.message : 
-                        (e && e.name ? `${e.name}: 권한을 허용해주세요.` : '알 수 없는 오류가 발생했습니다.');
-        alert(`카메라/마이크 권한을 허용해야 매칭이 가능합니다.\n\n${errorMsg}`);
-        
-        // 버튼 복원
-        btnStart.disabled = false;
-        btnStart.textContent = '매칭 시작';
-        console.error('getMedia 오류:', e);
-      }
-    };
+    console.log('[setupButtons] btnStart 요소 확인됨 (인라인 onclick 사용)');
+  } else {
+    console.error('[setupButtons] btnStart 요소를 찾을 수 없습니다!');
   }
 
   if (btnStop) {
-    btnStop.onclick = () => { 
-      stayMatching = false; 
-      wsSend({ type: 'leaveQueue' }); 
-      showHangupButton(false);
-    };
+    console.log('[setupButtons] btnStop 요소 확인됨');
+    // btnStop은 HTML에 없으므로 필요시 추가
   }
 
   if (btnHangup) {
-    btnHangup.onclick = () => { 
-      stayMatching = false;
-      
-      // 즉시 원격 비디오 정리
-      const rv = $('remoteVideo');
-      if (rv && rv.srcObject) {
-        const remoteStream = rv.srcObject;
-        remoteStream.getTracks().forEach(track => {
-          track.stop();
-          track.enabled = false;
-        });
-        rv.srcObject = null;
-        rv.pause();
-      }
-      
-      if (roomId) {
-        wsSend({ type: 'endCall', roomId }); 
-      }
-      
-      // 평점 입력
-      if (partnerUsername && roomId) {
-        showRatingDialog();
-      }
-      
-      wsSend({ type: 'leaveQueue' });
-      teardown('수동 종료', false);
-      showHangupButton(false);
-      
-      // 매칭 시작 버튼 복원
-      if (btnStart) {
-        btnStart.disabled = false;
-        btnStart.textContent = '매칭 시작';
-      }
-      
-      setStatus('Idle');
-    };
+    console.log('[setupButtons] btnHangup 요소 확인됨 (인라인 onclick 사용)');
   }
 
+  // 인라인 onclick이 이미 있으므로 추가 이벤트 리스너는 선택적
   if (btnMute) {
-    btnMute.onclick = () => {
-      const track = (micSender && micSender.track) || (localStream && localStream.getAudioTracks()[0]);
-      if (!track) { alert('마이크 트랙이 없습니다.'); return; }
-      track.enabled = !track.enabled;
-      alert(track.enabled ? '마이크가 켜졌습니다.' : '마이크가 꺼졌습니다.');
-    };
+    console.log('[setupButtons] btnMute 요소 확인됨 (인라인 onclick 사용)');
   }
-
+  
   if (btnCamera) {
-    btnCamera.onclick = () => {
-      const track = (camSender && camSender.track) || (localStream && localStream.getVideoTracks()[0]);
-      if (!track) { alert('카메라 트랙이 없습니다.'); return; }
-      track.enabled = !track.enabled;
-      alert(track.enabled ? '카메라가 켜졌습니다.' : '카메라가 꺼졌습니다.');
-    };
+    console.log('[setupButtons] btnCamera 요소 확인됨 (인라인 onclick 사용)');
   }
+  
+  if (btnBack) {
+    console.log('[setupButtons] btnBack 요소 확인됨 (인라인 onclick 사용)');
+  }
+}
 
 function showRatingDialog() {
   const dialog = document.getElementById('ratingDialog');
@@ -704,22 +769,46 @@ function closeWindowAndCleanup() {
   }, 100);
 }
 
-  if (btnBack) {
-    btnBack.onclick = () => {
-      // 다른 모든 창에 닫기 메시지 전송
-      if (broadcastChannel) {
-        broadcastChannel.postMessage('close-window');
-      }
-      
-      // 현재 창도 닫기
-      closeWindowAndCleanup();
-    };
+// setupButtons를 전역으로 노출 (함수 정의 후)
+console.log('[app.js] 스크립트 로드됨, readyState:', document.readyState);
+console.log('[app.js] setupButtons 함수 존재:', typeof setupButtons !== 'undefined');
+
+// setupButtons를 전역으로 노출
+if (typeof setupButtons === 'function') {
+  window.setupButtons = setupButtons;
+} else {
+  console.error('[app.js] setupButtons 함수를 찾을 수 없습니다!');
+}
+
+// 여러 방법으로 setupButtons 호출 보장
+function initializeButtons() {
+  console.log('[app.js] initializeButtons 호출');
+  if (typeof setupButtons === 'function') {
+    setupButtons();
+  } else {
+    console.error('[app.js] setupButtons 함수를 찾을 수 없습니다!');
   }
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupButtons);
+  console.log('[app.js] DOMContentLoaded 이벤트 리스너 등록');
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[app.js] DOMContentLoaded 이벤트 발생');
+    initializeButtons();
+  });
 } else {
-  setupButtons();
+  console.log('[app.js] DOM이 이미 로드됨, setupButtons 즉시 호출');
+  // DOM이 이미 로드된 경우에도 약간의 지연을 두어 모든 요소가 준비되도록 함
+  setTimeout(() => {
+    initializeButtons();
+  }, 100);
 }
+
+// window.load 이벤트에도 등록 (이중 보장)
+window.addEventListener('load', () => {
+  console.log('[app.js] window.load 이벤트 발생');
+  setTimeout(() => {
+    initializeButtons();
+  }, 200);
+});
 

@@ -11,13 +11,8 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.net.URISyntaxException;
 
-public class MatchingFrame extends JFrame {
-    // 사이버펑크 네온 다크 테마 색상
-    private static final Color NEON_CYAN = new Color(0, 255, 255);
-    private static final Color NEON_PINK = new Color(255, 0, 128);
-    private static final Color DARK_BG = new Color(18, 18, 24);
-    private static final Color TEXT_LIGHT = new Color(240, 240, 255);
-    
+public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeListener {
+    private final ThemeManager themeManager = ThemeManager.getInstance();
     private Socket socket;
     private JLabel statusLabel;
     private JButton startButton;
@@ -51,15 +46,15 @@ public class MatchingFrame extends JFrame {
 
         statusLabel = new JLabel("랜덤 채팅 매칭");
         statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD, 18f));
-        statusLabel.setForeground(TEXT_LIGHT);
+        statusLabel.setForeground(ThemeManager.TEXT_LIGHT);
         gbc.gridx = 0;
         gbc.gridy = 0;
         centerPanel.add(statusLabel, gbc);
 
         startButton = new JButton("매칭 시작");
         startButton.setPreferredSize(new Dimension(150, 40));
-        startButton.setBackground(NEON_CYAN);
-        startButton.setForeground(DARK_BG);
+        startButton.setBackground(ThemeManager.NEON_CYAN);
+        startButton.setForeground(ThemeManager.DARK_BG);
         startButton.setFocusPainted(false);
         startButton.addActionListener(e -> startMatching());
         gbc.gridy = 1;
@@ -67,7 +62,7 @@ public class MatchingFrame extends JFrame {
 
         endButton = new JButton("매칭 종료");
         endButton.setPreferredSize(new Dimension(150, 40));
-        endButton.setBackground(NEON_PINK);
+        endButton.setBackground(ThemeManager.NEON_PINK);
         endButton.setForeground(Color.WHITE);
         endButton.setFocusPainted(false);
         endButton.setEnabled(false);
@@ -88,6 +83,51 @@ public class MatchingFrame extends JFrame {
 
         // Socket.io 연결
         connectSocket();
+        
+        // ThemeManager에 리스너 등록
+        themeManager.addThemeChangeListener(this);
+        
+        // 초기 테마 적용
+        applyTheme();
+    }
+    
+    @Override
+    public void onThemeChanged() {
+        applyTheme();
+    }
+    
+    private void applyTheme() {
+        boolean isDarkMode = themeManager.isDarkMode();
+        
+        getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        
+        JPanel topPanel = (JPanel) getContentPane().getComponent(0);
+        topPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        
+        JPanel centerPanel = (JPanel) getContentPane().getComponent(1);
+        centerPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        
+        statusLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        
+        if (isDarkMode) {
+            startButton.setBackground(ThemeManager.NEON_CYAN);
+            startButton.setForeground(ThemeManager.DARK_BG);
+            endButton.setBackground(ThemeManager.NEON_PINK);
+            endButton.setForeground(Color.WHITE);
+        } else {
+            startButton.setBackground(ThemeManager.LIGHT_CYAN);
+            startButton.setForeground(Color.WHITE);
+            endButton.setBackground(ThemeManager.LIGHT_PINK);
+            endButton.setForeground(Color.WHITE);
+        }
+        
+        JButton exitButton = (JButton) topPanel.getComponent(0);
+        exitButton.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+        exitButton.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        exitButton.setBorder(BorderFactory.createLineBorder(
+            isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        
+        SwingUtilities.updateComponentTreeUI(this);
     }
 
     private void connectSocket() {

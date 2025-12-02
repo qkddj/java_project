@@ -9,25 +9,9 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
-public class MainFrame extends JFrame {
+public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListener {
 
-  // 사이버펑크 네온 다크 테마 색상
-  private static final Color NEON_CYAN = new Color(0, 255, 255);
-  private static final Color NEON_PINK = new Color(255, 0, 128);
-  private static final Color DARK_BG = new Color(18, 18, 24);
-  private static final Color DARK_BG2 = new Color(28, 28, 36);
-  private static final Color DARK_BORDER = new Color(60, 60, 80);
-  private static final Color TEXT_LIGHT = new Color(240, 240, 255);
-
-  // 라이트 테마 색상
-  private static final Color LIGHT_BG = new Color(245, 245, 250);
-  private static final Color LIGHT_BG2 = new Color(255, 255, 255);
-  private static final Color LIGHT_BORDER = new Color(200, 200, 220);
-  private static final Color TEXT_DARK = new Color(30, 30, 40);
-  private static final Color LIGHT_CYAN = new Color(0, 180, 200);
-  private static final Color LIGHT_PINK = new Color(200, 0, 100);
-
-  private boolean isDarkMode = true;
+  private final ThemeManager themeManager = ThemeManager.getInstance();
   private final User user;
   
   // 테마 적용을 위한 컴포넌트 참조
@@ -73,9 +57,11 @@ public class MainFrame extends JFrame {
     themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     themeToggleBtn.setFocusPainted(false);
     themeToggleBtn.addActionListener(e -> {
-      isDarkMode = !isDarkMode;
-      applyTheme();
+      themeManager.toggleTheme();
     });
+    
+    // ThemeManager에 리스너 등록
+    themeManager.addThemeChangeListener(this);
 
     String neighborhood = (user.neighborhood != null && !user.neighborhood.isBlank())
         ? user.neighborhood : "unknown";
@@ -98,9 +84,11 @@ public class MainFrame extends JFrame {
 
     // ===== 중앙: 게시판 리스트 (선택 가능) =====
     centerWrap = new JPanel(new GridBagLayout());
+    centerWrap.setOpaque(true);
     boardBox = new JPanel(new BorderLayout());
-    boardBox.setBorder(new LineBorder(NEON_CYAN, 2, true));
-    boardBox.setBackground(DARK_BG2);
+    boardBox.setBorder(new LineBorder(ThemeManager.NEON_CYAN, 2, true));
+    boardBox.setBackground(ThemeManager.DARK_BG2);
+    boardBox.setOpaque(true);
     boardBox.setPreferredSize(new Dimension(360, 320));
 
     list = new JList<>(boards);
@@ -148,16 +136,17 @@ public class MainFrame extends JFrame {
 
     // ===== 하단: 랜덤 채팅 / 랜덤 영상 통화 =====
     bottom = new JPanel(new FlowLayout(FlowLayout.CENTER, 30, 10));
+    bottom.setOpaque(true);
     btnChat = new JButton("랜덤 채팅");
     btnVideo = new JButton("랜덤 영상 통화");
 
     // 네온 스타일 버튼
-    btnChat.setBackground(NEON_CYAN);
-    btnChat.setForeground(DARK_BG);
+    btnChat.setBackground(ThemeManager.NEON_CYAN);
+    btnChat.setForeground(ThemeManager.DARK_BG);
     btnChat.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
     btnChat.setFocusPainted(false);
     
-    btnVideo.setBackground(NEON_PINK);
+    btnVideo.setBackground(ThemeManager.NEON_PINK);
     btnVideo.setForeground(Color.WHITE);
     btnVideo.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
     btnVideo.setFocusPainted(false);
@@ -175,9 +164,28 @@ public class MainFrame extends JFrame {
         matchingFrameRef[0].setVisible(true);
     });
     btnVideo.addActionListener(e -> {
-        SwingUtilities.invokeLater(() -> {
-            new VideoCallFrame(user);
-        });
+        System.out.println("[MainFrame] 랜덤 영상 통화 버튼 클릭됨");
+        System.out.println("[MainFrame] user: " + (user != null ? user.username : "null"));
+        System.out.println("[MainFrame] isDarkMode: " + themeManager.isDarkMode());
+        
+        // UI 스레드에서 직접 실행 (비동기 스레드 문제 해결)
+        try {
+            System.out.println("[MainFrame] VideoCallFrame 생성 시작...");
+            VideoCallFrame frame = new VideoCallFrame(user, themeManager.isDarkMode());
+            System.out.println("[MainFrame] VideoCallFrame 생성 완료");
+        } catch (Exception ex) {
+            System.err.println("[MainFrame] VideoCallFrame 생성 실패: " + ex.getMessage());
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, 
+                "영상통화를 시작할 수 없습니다: " + ex.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.", 
+                "오류", JOptionPane.ERROR_MESSAGE);
+        } catch (Throwable t) {
+            System.err.println("[MainFrame] VideoCallFrame 생성 중 예상치 못한 오류: " + t.getMessage());
+            t.printStackTrace();
+            JOptionPane.showMessageDialog(this, 
+                "영상통화를 시작할 수 없습니다: " + t.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.", 
+                "오류", JOptionPane.ERROR_MESSAGE);
+        }
     });
 
     bottom.add(btnChat);
@@ -193,88 +201,104 @@ public class MainFrame extends JFrame {
     SwingUtilities.invokeLater(() -> new BoardFrame(user, boardName).setVisible(true));
   }
 
+  @Override
+  public void onThemeChanged() {
+    applyTheme();
+  }
+  
   private void applyTheme() {
+    boolean isDarkMode = themeManager.isDarkMode();
     if (isDarkMode) {
       // 다크모드 적용
-      getContentPane().setBackground(DARK_BG);
-      top.setBackground(DARK_BG);
-      right.setBackground(DARK_BG);
-      idAndLoc.setForeground(TEXT_LIGHT);
-      logout.setBackground(DARK_BG2);
-      logout.setForeground(TEXT_LIGHT);
-      logout.setBorder(BorderFactory.createLineBorder(DARK_BORDER, 1));
+      getContentPane().setBackground(ThemeManager.DARK_BG);
+      top.setBackground(ThemeManager.DARK_BG);
+      right.setBackground(ThemeManager.DARK_BG);
+      idAndLoc.setForeground(ThemeManager.TEXT_LIGHT);
+      logout.setBackground(ThemeManager.DARK_BG2);
+      logout.setForeground(ThemeManager.TEXT_LIGHT);
+      logout.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
       
-      centerWrap.setBackground(DARK_BG);
-      boardBox.setBorder(new LineBorder(NEON_CYAN, 2, true));
-      boardBox.setBackground(DARK_BG2);
+      centerWrap.setBackground(ThemeManager.DARK_BG);
+      centerWrap.setOpaque(true);
+      boardBox.setBorder(new LineBorder(ThemeManager.NEON_CYAN, 2, true));
+      boardBox.setBackground(ThemeManager.DARK_BG2);
+      boardBox.setOpaque(true);
       
-      list.setBackground(DARK_BG2);
-      list.setForeground(TEXT_LIGHT);
-      list.setSelectionBackground(NEON_CYAN);
-      list.setSelectionForeground(DARK_BG);
+      list.setBackground(ThemeManager.DARK_BG2);
+      list.setForeground(ThemeManager.TEXT_LIGHT);
+      list.setSelectionBackground(ThemeManager.NEON_CYAN);
+      list.setSelectionForeground(ThemeManager.DARK_BG);
       
-      scroll.setBackground(DARK_BG2);
-      scroll.getViewport().setBackground(DARK_BG2);
+      scroll.setBackground(ThemeManager.DARK_BG2);
+      scroll.getViewport().setBackground(ThemeManager.DARK_BG2);
       scroll.setBorder(BorderFactory.createEmptyBorder());
+      scroll.setOpaque(true);
       
-      openBar.setBackground(DARK_BG2);
-      btnOpen.setBackground(DARK_BG);
-      btnOpen.setForeground(TEXT_LIGHT);
-      btnOpen.setBorder(BorderFactory.createLineBorder(DARK_BORDER, 1));
+      openBar.setBackground(ThemeManager.DARK_BG2);
+      openBar.setOpaque(true);
+      btnOpen.setBackground(ThemeManager.DARK_BG);
+      btnOpen.setForeground(ThemeManager.TEXT_LIGHT);
+      btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
       
-      bottom.setBackground(DARK_BG);
-      btnChat.setBackground(NEON_CYAN);
-      btnChat.setForeground(DARK_BG);
-      btnVideo.setBackground(NEON_PINK);
+      bottom.setBackground(ThemeManager.DARK_BG);
+      bottom.setOpaque(true);
+      btnChat.setBackground(ThemeManager.NEON_CYAN);
+      btnChat.setForeground(ThemeManager.DARK_BG);
+      btnVideo.setBackground(ThemeManager.NEON_PINK);
       btnVideo.setForeground(Color.WHITE);
       
       themeToggleBtn.setText("🌙 다크모드");
-      themeToggleBtn.setBackground(DARK_BG2);
-      themeToggleBtn.setForeground(TEXT_LIGHT);
-      themeToggleBtn.setBorder(BorderFactory.createLineBorder(DARK_BORDER, 1));
+      themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
+      themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
+      themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
     } else {
       // 라이트모드 적용
-      getContentPane().setBackground(LIGHT_BG);
-      top.setBackground(LIGHT_BG);
-      right.setBackground(LIGHT_BG);
-      idAndLoc.setForeground(TEXT_DARK);
-      logout.setBackground(LIGHT_BG2);
-      logout.setForeground(TEXT_DARK);
-      logout.setBorder(BorderFactory.createLineBorder(LIGHT_BORDER, 1));
+      getContentPane().setBackground(ThemeManager.LIGHT_BG);
+      top.setBackground(ThemeManager.LIGHT_BG);
+      right.setBackground(ThemeManager.LIGHT_BG);
+      idAndLoc.setForeground(ThemeManager.TEXT_DARK);
+      logout.setBackground(ThemeManager.LIGHT_BG2);
+      logout.setForeground(ThemeManager.TEXT_DARK);
+      logout.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
       
-      centerWrap.setBackground(LIGHT_BG);
-      boardBox.setBorder(new LineBorder(LIGHT_CYAN, 2, true));
-      boardBox.setBackground(LIGHT_BG2);
+      centerWrap.setBackground(ThemeManager.LIGHT_BG);
+      centerWrap.setOpaque(true);
+      boardBox.setBorder(new LineBorder(ThemeManager.LIGHT_CYAN, 2, true));
+      boardBox.setBackground(ThemeManager.LIGHT_BG2);
+      boardBox.setOpaque(true);
       
-      list.setBackground(LIGHT_BG2);
-      list.setForeground(TEXT_DARK);
-      list.setSelectionBackground(LIGHT_CYAN);
+      list.setBackground(ThemeManager.LIGHT_BG2);
+      list.setForeground(ThemeManager.TEXT_DARK);
+      list.setSelectionBackground(ThemeManager.LIGHT_CYAN);
       list.setSelectionForeground(Color.WHITE);
       
-      scroll.setBackground(LIGHT_BG2);
-      scroll.getViewport().setBackground(LIGHT_BG2);
+      scroll.setBackground(ThemeManager.LIGHT_BG2);
+      scroll.getViewport().setBackground(ThemeManager.LIGHT_BG2);
       scroll.setBorder(BorderFactory.createEmptyBorder());
+      scroll.setOpaque(true);
       
-      openBar.setBackground(LIGHT_BG2);
-      btnOpen.setBackground(LIGHT_BG);
-      btnOpen.setForeground(TEXT_DARK);
-      btnOpen.setBorder(BorderFactory.createLineBorder(LIGHT_BORDER, 1));
+      openBar.setBackground(ThemeManager.LIGHT_BG2);
+      openBar.setOpaque(true);
+      btnOpen.setBackground(ThemeManager.LIGHT_BG);
+      btnOpen.setForeground(ThemeManager.TEXT_DARK);
+      btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
       
-      bottom.setBackground(LIGHT_BG);
-      btnChat.setBackground(LIGHT_CYAN);
+      bottom.setBackground(ThemeManager.LIGHT_BG);
+      bottom.setOpaque(true);
+      btnChat.setBackground(ThemeManager.LIGHT_CYAN);
       btnChat.setForeground(Color.WHITE);
-      btnVideo.setBackground(LIGHT_PINK);
+      btnVideo.setBackground(ThemeManager.LIGHT_PINK);
       btnVideo.setForeground(Color.WHITE);
       
       themeToggleBtn.setText("☀️ 라이트모드");
-      themeToggleBtn.setBackground(LIGHT_BG2);
-      themeToggleBtn.setForeground(TEXT_DARK);
-      themeToggleBtn.setBorder(BorderFactory.createLineBorder(LIGHT_BORDER, 1));
+      themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
+      themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
+      themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
     }
     
     // 스크롤바 스타일도 적용
-    UIManager.put("ScrollBar.background", isDarkMode ? DARK_BG2 : LIGHT_BG2);
-    UIManager.put("ScrollBar.thumb", isDarkMode ? DARK_BORDER : LIGHT_BORDER);
+    UIManager.put("ScrollBar.background", isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+    UIManager.put("ScrollBar.thumb", isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER);
     SwingUtilities.updateComponentTreeUI(this);
   }
 }
