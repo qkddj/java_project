@@ -143,7 +143,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
             // 백그라운드 스레드에서 서버 찾기
             Thread discoveryThread = new Thread(() -> {
                 System.out.println("네트워크에서 서버를 자동으로 찾는 중...");
-                String discoveredServerIP = NetworkDiscovery.discoverServer(3000); // 3초 동안 찾기
+                String discoveredServerIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기 (더 길게)
                 
                 SwingUtilities.invokeLater(() -> {
                     if (discoveredServerIP != null && !discoveredServerIP.isEmpty()) {
@@ -151,14 +151,35 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
                         ServerConfig.setServerHost(discoveredServerIP);
                         statusLabel.setText("서버 발견: " + discoveredServerIP + " (연결 중...)");
                     } else {
-                        System.out.println("네트워크에서 서버를 찾을 수 없습니다. 기존 설정 사용: " + currentServerHost);
-                        // 로컬 IP 감지 시도
-                        String localIP = NetworkDiscovery.detectLocalIP();
-                        if (localIP != null && !localIP.equals("localhost") && !localIP.isEmpty()) {
-                            ServerConfig.setServerHost(localIP);
-                            System.out.println("로컬 IP 사용: " + localIP);
-                        }
-                        statusLabel.setText("서버 연결 중...");
+                        System.out.println("❌ 네트워크에서 서버를 찾을 수 없습니다.");
+                        System.out.println("   - 같은 네트워크에 서버가 실행 중인지 확인하세요");
+                        System.out.println("   - 서버 컴퓨터에서 프로그램을 먼저 실행하세요");
+                        statusLabel.setText("서버를 찾을 수 없습니다. 잠시 후 다시 시도...");
+                        
+                        // 3초 후 다시 서버 찾기 시도
+                        Thread retryThread = new Thread(() -> {
+                            try {
+                                Thread.sleep(3000);
+                                System.out.println("서버 찾기 재시도 중...");
+                                String retryIP = NetworkDiscovery.discoverServer(10000);
+                                SwingUtilities.invokeLater(() -> {
+                                    if (retryIP != null && !retryIP.isEmpty()) {
+                                        ServerConfig.setServerHost(retryIP);
+                                        statusLabel.setText("서버 발견: " + retryIP + " (연결 중...)");
+                                        tryConnectSocket();
+                                    } else {
+                                        statusLabel.setText("서버를 찾을 수 없습니다. 연결 실패 시 수동 설정 가능합니다.");
+                                        // 연결 시도 (실패하면 IP 입력 다이얼로그 표시)
+                                        tryConnectSocket();
+                                    }
+                                });
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                        retryThread.setDaemon(true);
+                        retryThread.start();
+                        return; // 재시도할 때까지 연결하지 않음
                     }
                     // 서버 찾기 완료 후 실제 연결 시도
                     tryConnectSocket();
@@ -226,7 +247,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
                         // 백그라운드 스레드에서 서버 찾기 시도
                         Thread discoveryThread = new Thread(() -> {
                             System.out.println("연결 실패 후 네트워크에서 서버를 자동으로 찾는 중...");
-                            String discoveredServerIP = NetworkDiscovery.discoverServer(5000); // 5초 동안 찾기
+                            String discoveredServerIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기 (더 길게)
                             
                             SwingUtilities.invokeLater(() -> {
                                 if (discoveredServerIP != null && !discoveredServerIP.isEmpty()) {

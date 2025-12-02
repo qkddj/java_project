@@ -26,16 +26,28 @@ public class NetworkDiscovery {
                 InetAddress broadcast = InetAddress.getByName("255.255.255.255");
                 DatagramPacket packet = new DatagramPacket(message, message.length, broadcast, DISCOVERY_PORT);
                 
+                System.out.println("🔔 서버 브로드캐스트 시작: " + serverIP + " (포트 " + DISCOVERY_PORT + ") - 2초마다 자동 전송 중...");
+                
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
                         socket.send(packet);
+                        // 브로드캐스트 로그는 출력하지 않음 (로그 스팸 방지)
+                        // 클라이언트가 요청하면 리스너에서 로그가 출력됨
                         Thread.sleep(2000); // 2초마다 브로드캐스트
                     } catch (InterruptedException e) {
                         break;
+                    } catch (IOException e) {
+                        System.err.println("브로드캐스트 전송 오류: " + e.getMessage());
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException ie) {
+                            break;
+                        }
                     }
                 }
             } catch (IOException e) {
                 System.err.println("서버 브로드캐스트 실패: " + e.getMessage());
+                e.printStackTrace();
             }
         });
         broadcastThread.setDaemon(true);
@@ -44,40 +56,91 @@ public class NetworkDiscovery {
     
     /**
      * 클라이언트가 네트워크에서 서버를 찾음
+     * 자신의 서버가 아닌 다른 서버를 우선적으로 선택
      * @return 찾은 서버 IP 주소, 없으면 null
      */
     public static String discoverServer(int timeoutMs) {
+        String localIP = detectLocalIP();
+        java.util.Set<String> foundServers = new java.util.HashSet<>();
+        
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
-            socket.setSoTimeout(timeoutMs);
+            socket.setSoTimeout(1000); // 1초마다 타임아웃하고 재시도
             
-            // 브로드캐스트 요청 전송
             byte[] request = DISCOVERY_MESSAGE.getBytes(StandardCharsets.UTF_8);
             InetAddress broadcast = InetAddress.getByName("255.255.255.255");
             DatagramPacket requestPacket = new DatagramPacket(request, request.length, broadcast, DISCOVERY_PORT);
-            socket.send(requestPacket);
             
-            // 응답 대기
             byte[] buffer = new byte[1024];
             DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
             
             long startTime = System.currentTimeMillis();
+            int attempts = 0;
+            
+            System.out.println("🔍 네트워크에서 서버 찾는 중... (최대 " + (timeoutMs / 1000) + "초)");
+            System.out.println("   내 IP: " + localIP);
+            
             while (System.currentTimeMillis() - startTime < timeoutMs) {
                 try {
+                    // 주기적으로 브로드캐스트 요청 전송
+                    if (attempts % 2 == 0) { // 2초마다 요청 전송
+                        socket.send(requestPacket);
+                        System.out.println("📤 서버 발견 요청 전송... (시도 " + (attempts / 2 + 1) + ")");
+                    }
+                    attempts++;
+                    
                     socket.receive(responsePacket);
                     String response = new String(responsePacket.getData(), 0, responsePacket.getLength(), StandardCharsets.UTF_8);
+                    String responderIP = responsePacket.getAddress().getHostAddress();
+                    
+                    System.out.println("📥 응답 수신: " + response + " (from: " + responderIP + ")");
                     
                     if (response.startsWith(RESPONSE_PREFIX)) {
                         String serverIP = response.substring(RESPONSE_PREFIX.length()).trim();
-                        System.out.println("서버 발견: " + serverIP);
-                        return serverIP;
+                        foundServers.add(serverIP);
+                        
+                        // 자신의 서버가 아닌 경우 즉시 반환
+                        if (!serverIP.equals(localIP) && !serverIP.equals("localhost") && 
+                            !responderIP.equals(localIP)) {
+                            System.out.println("✅ 다른 서버 발견: " + serverIP + " (응답자: " + responderIP + ")");
+                            return serverIP;
+                        } else {
+                            System.out.println("⚠️  자신의 서버입니다: " + serverIP + " (계속 찾는 중...)");
+                        }
                     }
                 } catch (SocketTimeoutException e) {
                     // 타임아웃 - 계속 시도
+                    long elapsed = System.currentTimeMillis() - startTime;
+                    if (elapsed < timeoutMs) {
+                        // 계속 시도
+                    }
+                } catch (IOException e) {
+                    System.err.println("서버 발견 중 오류: " + e.getMessage());
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
                 }
+            }
+            
+            // 자신의 서버만 찾은 경우 또는 타임아웃
+            if (!foundServers.isEmpty()) {
+                // 찾은 서버 중 하나라도 자신의 서버가 아니면 선택
+                for (String serverIP : foundServers) {
+                    if (!serverIP.equals(localIP) && !serverIP.equals("localhost")) {
+                        System.out.println("✅ 발견된 서버 중 다른 서버 선택: " + serverIP);
+                        return serverIP;
+                    }
+                }
+                // 자신의 서버만 찾은 경우
+                System.out.println("⚠️  자신의 서버만 발견되었습니다. 다른 서버를 찾지 못했습니다.");
+            } else {
+                System.out.println("❌ 서버를 찾을 수 없습니다. (타임아웃: " + timeoutMs + "ms)");
             }
         } catch (IOException e) {
             System.err.println("서버 발견 실패: " + e.getMessage());
+            e.printStackTrace();
         }
         return null;
     }
@@ -89,14 +152,27 @@ public class NetworkDiscovery {
         Thread listenerThread = new Thread(() -> {
             try (DatagramSocket socket = new DatagramSocket(DISCOVERY_PORT)) {
                 socket.setBroadcast(true);
+                socket.setSoTimeout(0); // 무한 대기
                 byte[] buffer = new byte[1024];
+                
+                System.out.println("👂 서버 리스너 시작: 포트 " + DISCOVERY_PORT + "에서 요청 대기 중...");
                 
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
                         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                         socket.receive(packet);
                         
-                        String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+                        String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
+                        String clientIP = packet.getAddress().getHostAddress();
+                        
+                        // 자신이 보낸 브로드캐스트 메시지는 무시 (무한 루프 방지)
+                        if (clientIP.equals(serverIP) || message.startsWith(RESPONSE_PREFIX)) {
+                            // 자신이 보낸 메시지이거나 응답 메시지는 무시
+                            continue;
+                        }
+                        
+                        System.out.println("📨 서버 발견 요청 수신: " + message + " (요청자: " + clientIP + ")");
+                        
                         if (DISCOVERY_MESSAGE.equals(message)) {
                             // 서버 IP 응답 전송
                             byte[] response = (RESPONSE_PREFIX + serverIP).getBytes(StandardCharsets.UTF_8);
@@ -105,16 +181,20 @@ public class NetworkDiscovery {
                                 packet.getAddress(), packet.getPort()
                             );
                             socket.send(responsePacket);
-                            System.out.println("서버 발견 요청에 응답: " + packet.getAddress());
+                            System.out.println("✅ 서버 발견 요청에 응답 전송: " + serverIP + " → " + clientIP);
+                        } else {
+                            System.out.println("⚠️  알 수 없는 메시지: " + message + " (요청자: " + clientIP + ")");
                         }
                     } catch (IOException e) {
                         if (!socket.isClosed()) {
                             System.err.println("서버 리스너 오류: " + e.getMessage());
+                            e.printStackTrace();
                         }
                     }
                 }
             } catch (SocketException e) {
                 System.err.println("서버 리스너 시작 실패: " + e.getMessage());
+                e.printStackTrace();
             }
         });
         listenerThread.setDaemon(true);
@@ -202,9 +282,9 @@ public class NetworkDiscovery {
     }
     
     /**
-     * 기본 게이트웨이(라우터) 주소를 가져옴
+     * 기본 게이트웨이(라우터) 주소를 가져옴 (public 메서드로 변경)
      */
-    private static String getDefaultGateway() {
+    public static String getDefaultGateway() {
         try {
             String os = System.getProperty("os.name").toLowerCase();
             
