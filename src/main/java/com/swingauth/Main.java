@@ -12,15 +12,33 @@ import com.formdev.flatlaf.FlatDarkLaf;
 
 public class Main {
   public static void main(String[] args) {
-    // CHAT_SERVER_HOST가 설정되어 있으면 클라이언트만 실행, 없으면 서버+클라이언트 실행
+    // CHAT_SERVER_HOST가 설정되어 있으면 클라이언트만 실행
     String serverHost = System.getenv("CHAT_SERVER_HOST");
     String serverHostProp = System.getProperty("chat.server.host");
     boolean isClientOnly = (serverHostProp != null && !serverHostProp.isEmpty()) || 
                            (serverHost != null && !serverHost.isEmpty());
     
+    // 환경 변수가 없으면 네트워크에서 기존 서버를 먼저 찾아봅니다
+    if (!isClientOnly) {
+      System.out.println("🔍 네트워크에서 기존 서버를 찾는 중...");
+      String existingServer = NetworkDiscovery.discoverServer(3000); // 3초 동안 찾기
+      
+      if (existingServer != null && !existingServer.isEmpty()) {
+        // 기존 서버를 찾았으면 클라이언트 모드로 실행
+        System.out.println("✅ 기존 서버를 발견했습니다: " + existingServer);
+        System.out.println("=== 클라이언트 모드: 기존 서버에 연결합니다 ===");
+        isClientOnly = true; // 클라이언트 모드로 전환
+        ServerConfig.setServerHost(existingServer);
+        System.out.println("   서버 주소: " + existingServer);
+      } else {
+        // 기존 서버를 찾지 못했으면 서버 모드로 실행
+        System.out.println("❌ 기존 서버를 찾을 수 없습니다.");
+        System.out.println("=== 서버 모드: 새 서버를 시작합니다 ===");
+      }
+    }
+    
     if (!isClientOnly) {
       // 서버 모드: 서버를 자동으로 시작
-      System.out.println("=== 서버 모드: 서버를 자동으로 시작합니다 ===");
       Thread serverThread = new Thread(() -> {
         try {
           // 서버 시작 전 약간의 지연
@@ -70,28 +88,33 @@ public class Main {
         ChatServer.getInstance().stop();
       }));
     } else {
-      // 클라이언트 모드: 서버 실행 안 함, 네트워크에서 서버 자동 발견 시도
-      System.out.println("=== 클라이언트 모드: 네트워크에서 서버를 찾는 중... ===");
+      // 클라이언트 모드: 서버 실행 안 함
       String configuredServerIP = serverHostProp != null ? serverHostProp : serverHost;
       
-        // 환경 변수가 설정되지 않았으면 네트워크에서 서버 찾기 시도
-        if (configuredServerIP == null || configuredServerIP.isEmpty()) {
-          System.out.println("네트워크에서 서버를 자동으로 찾는 중...");
-          String discoveredIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기 (더 길게)
-        if (discoveredIP != null && !discoveredIP.isEmpty()) {
-          ServerConfig.setServerHost(discoveredIP);
-          System.out.println("서버를 발견했습니다: " + discoveredIP);
-        } else {
-          // 발견 실패 시 로컬 IP로 직접 연결 시도하지 않음
-          // 대신 사용자에게 알림
-          System.out.println("❌ 서버를 찾을 수 없습니다.");
-          System.out.println("   - 같은 네트워크에 서버가 실행 중인지 확인하세요");
-          System.out.println("   - 서버 컴퓨터에서 프로그램을 먼저 실행하세요");
-          // 서버를 찾지 못했으므로 localhost 사용 (연결 실패 시 수동 설정 가능)
-          ServerConfig.setServerHost("localhost");
-        }
+      // 환경 변수로 서버 주소가 설정된 경우
+      if (configuredServerIP != null && !configuredServerIP.isEmpty()) {
+        System.out.println("=== 클라이언트 모드: 설정된 서버에 연결합니다 ===");
+        System.out.println("   서버 주소: " + configuredServerIP);
+        ServerConfig.setServerHost(configuredServerIP);
       } else {
-        System.out.println("설정된 서버 주소: " + configuredServerIP);
+        // 이미 네트워크에서 서버를 찾았거나, 다시 찾아야 하는 경우
+        String currentServerHost = ServerConfig.getServerHost();
+        if (currentServerHost == null || currentServerHost.equals("localhost")) {
+          System.out.println("=== 클라이언트 모드: 네트워크에서 서버를 찾는 중... ===");
+          String discoveredIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기
+          if (discoveredIP != null && !discoveredIP.isEmpty()) {
+            ServerConfig.setServerHost(discoveredIP);
+            System.out.println("✅ 서버를 발견했습니다: " + discoveredIP);
+          } else {
+            System.out.println("❌ 서버를 찾을 수 없습니다.");
+            System.out.println("   - 같은 네트워크에 서버가 실행 중인지 확인하세요");
+            System.out.println("   - 서버 컴퓨터에서 프로그램을 먼저 실행하세요");
+            ServerConfig.setServerHost("localhost");
+          }
+        } else {
+          System.out.println("=== 클라이언트 모드: 이미 찾은 서버에 연결합니다 ===");
+          System.out.println("   서버 주소: " + currentServerHost);
+        }
       }
     }
 
