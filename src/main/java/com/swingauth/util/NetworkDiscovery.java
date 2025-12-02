@@ -123,8 +123,12 @@ public class NetworkDiscovery {
     
     /**
      * 로컬 네트워크 IP 주소 감지
+     * 여러 네트워크 인터페이스가 있는 경우 실제 통신 가능한 IP를 우선 선택
      */
     public static String detectLocalIP() {
+        String preferredIP = null;
+        java.util.List<String> allIPs = new java.util.ArrayList<>();
+        
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
@@ -139,10 +143,38 @@ public class NetworkDiscovery {
                     InetAddress address = addresses.nextElement();
                     
                     if (!address.isLoopbackAddress() && address.getHostAddress().indexOf(':') == -1) {
-                        return address.getHostAddress();
+                        String ip = address.getHostAddress();
+                        allIPs.add(ip);
+                        
+                        // 우선순위: 192.168.x.x > 172.16-31.x.x > 10.x.x.x
+                        // (일반적으로 192.168.x.x가 가장 일반적인 홈/로컬 네트워크)
+                        if (preferredIP == null) {
+                            preferredIP = ip; // 일단 첫 번째 IP 저장
+                        } else {
+                            // 더 우선순위가 높은 IP가 있으면 변경
+                            if (ip.startsWith("192.168.") && !preferredIP.startsWith("192.168.")) {
+                                preferredIP = ip;
+                            } else if (ip.matches("^172\\.(1[6-9]|2[0-9]|3[01])\\..*") && 
+                                      !preferredIP.startsWith("192.168.") && 
+                                      !preferredIP.matches("^172\\.(1[6-9]|2[0-9]|3[01])\\..*")) {
+                                preferredIP = ip;
+                            }
+                        }
                     }
                 }
             }
+            
+            // 모든 네트워크 인터페이스 IP 출력
+            if (!allIPs.isEmpty()) {
+                System.out.println("발견된 네트워크 인터페이스 IP 주소:");
+                for (String ip : allIPs) {
+                    String marker = ip.equals(preferredIP) ? " ← 선택됨" : "";
+                    System.out.println("  - " + ip + marker);
+                }
+            }
+            
+            // 우선순위 IP가 있으면 반환, 없으면 첫 번째 IP 반환
+            return preferredIP != null ? preferredIP : (allIPs.isEmpty() ? "localhost" : allIPs.get(0));
         } catch (Exception e) {
             System.err.println("IP 주소 자동 감지 실패: " + e.getMessage());
         }

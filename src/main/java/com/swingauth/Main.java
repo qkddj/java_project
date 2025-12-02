@@ -32,9 +32,10 @@ public class Main {
             System.out.println("채팅 서버가 실행 중입니다.");
             
             // 서버 IP 주소 감지
+            System.out.println("\n📡 네트워크 인터페이스 검색 중...");
             String serverIP = NetworkDiscovery.detectLocalIP();
             if (!serverIP.equals("localhost")) {
-              System.out.println("서버 IP 주소: " + serverIP);
+              System.out.println("\n✅ 선택된 서버 IP 주소: " + serverIP);
               
               // 서버 IP를 ServerConfig에 설정 (클라이언트가 이 IP로 연결하도록)
               ServerConfig.setServerHost(serverIP);
@@ -42,7 +43,10 @@ public class Main {
               // 네트워크 발견 서비스 시작 (다른 컴퓨터가 자동으로 찾을 수 있도록)
               NetworkDiscovery.startServerListener(serverIP);
               NetworkDiscovery.startServerBroadcast(serverIP);
-              System.out.println("네트워크 자동 발견 서비스 시작됨");
+              System.out.println("✅ 네트워크 자동 발견 서비스 시작됨 (포트 3002)");
+              System.out.println("   다른 컴퓨터가 이 IP로 자동으로 연결할 수 있습니다: " + serverIP);
+            } else {
+              System.out.println("⚠️  네트워크 인터페이스를 찾을 수 없습니다. localhost를 사용합니다.");
             }
           } else {
             System.out.println("채팅 서버가 이미 실행 중입니다.");
