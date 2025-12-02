@@ -77,8 +77,18 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JButton btnSearch = new JButton("검색");
     JButton btnNew = new JButton("글쓰기");
     
+    // 초기 색상 설정
+    btnSearch.setBackground(ThemeManager.LIGHT_BG2);
+    btnSearch.setForeground(ThemeManager.TEXT_DARK);
+    btnNew.setBackground(ThemeManager.LIGHT_BG2);
+    btnNew.setForeground(ThemeManager.TEXT_DARK);
+    
     ThemeManager.disableButtonPressedEffect(btnSearch);
     ThemeManager.disableButtonPressedEffect(btnNew);
+    
+    // 초기 색상 저장
+    ThemeManager.updateButtonColors(btnSearch, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
+    ThemeManager.updateButtonColors(btnNew, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
 
     btnSearch.addActionListener(e -> {
       currentKeyword = searchField.getText();
@@ -130,8 +140,19 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
     JButton btnRefresh = new JButton("새로고침");
     JButton btnClose = new JButton("닫기");
+    
+    // 초기 색상 설정
+    btnRefresh.setBackground(ThemeManager.LIGHT_BG2);
+    btnRefresh.setForeground(ThemeManager.TEXT_DARK);
+    btnClose.setBackground(ThemeManager.LIGHT_BG2);
+    btnClose.setForeground(ThemeManager.TEXT_DARK);
+    
     ThemeManager.disableButtonPressedEffect(btnRefresh);
     ThemeManager.disableButtonPressedEffect(btnClose);
+    
+    // 초기 색상 저장
+    ThemeManager.updateButtonColors(btnRefresh, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
+    ThemeManager.updateButtonColors(btnClose, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
     btnRefresh.addActionListener(e -> resetAndLoad());
     btnClose.addActionListener(e -> dispose());
     bottom.add(btnRefresh);
@@ -235,10 +256,14 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         area.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
       } else if (comp instanceof JButton) {
         JButton btn = (JButton) comp;
-        btn.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        btn.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        Color bg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+        Color fg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        btn.setBackground(bg);
+        btn.setForeground(fg);
         btn.setBorder(BorderFactory.createLineBorder(
             isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+        // 테마 변경 시 버튼 색상 업데이트
+        ThemeManager.updateButtonColors(btn, bg, fg);
       } else if (comp instanceof JScrollPane) {
         JScrollPane scroll = (JScrollPane) comp;
         scroll.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);

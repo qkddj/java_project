@@ -261,6 +261,12 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
+      
+      ThemeManager.updateButtonColors(logout, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(btnOpen, ThemeManager.DARK_BG, ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(btnChat, ThemeManager.NEON_CYAN, ThemeManager.DARK_BG);
+      ThemeManager.updateButtonColors(btnVideo, ThemeManager.NEON_PINK, Color.WHITE);
     } else {
       // 라이트모드 적용
       getContentPane().setBackground(ThemeManager.LIGHT_BG);
@@ -304,6 +310,12 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
+      
+      ThemeManager.updateButtonColors(logout, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(btnOpen, ThemeManager.LIGHT_BG, ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(btnChat, ThemeManager.LIGHT_CYAN, Color.WHITE);
+      ThemeManager.updateButtonColors(btnVideo, ThemeManager.LIGHT_PINK, Color.WHITE);
     }
     
     // 스크롤바 스타일도 적용

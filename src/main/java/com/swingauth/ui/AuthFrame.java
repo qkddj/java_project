@@ -24,33 +24,74 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     setLocationRelativeTo(null);
     setLayout(new BorderLayout());
 
-    // ===== 상단: 테마 전환 버튼 =====
-    top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+    // ===== 상단: 테마 전환 버튼 (메인화면과 동일한 스타일) =====
+    top = new JPanel(new BorderLayout());
+    top.setBorder(BorderFactory.createEmptyBorder(10, 12, 0, 12));
     top.setOpaque(true);
+    
     themeToggleBtn = new JButton("🌙 다크모드");
     themeToggleBtn.setFont(themeToggleBtn.getFont().deriveFont(Font.BOLD, 12f));
-    themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     themeToggleBtn.setFocusPainted(false);
+    
+    // 초기 색상 설정 (현재 테마에 맞게)
+    boolean isDarkMode = themeManager.isDarkMode();
+    if (isDarkMode) {
+      themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
+      themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
+      themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+    } else {
+      themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
+      themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
+      themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+    }
+    
     ThemeManager.disableButtonPressedEffect(themeToggleBtn);
+    ThemeManager.updateButtonColors(themeToggleBtn, 
+        isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2,
+        isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
     themeToggleBtn.addActionListener(e -> {
       themeManager.toggleTheme();
     });
-    top.add(themeToggleBtn);
+    
+    top.add(themeToggleBtn, BorderLayout.WEST);
     add(top, BorderLayout.NORTH);
 
     // ThemeManager에 리스너 등록
     themeManager.addThemeChangeListener(this);
 
     tabs = new JTabbedPane();
+    tabs.setOpaque(true);
     loginPanel = buildLoginPanel();
     signUpPanel = buildSignUpPanel();
     tabs.addTab("로그인", loginPanel);
     tabs.addTab("회원가입", signUpPanel);
+    
+    // 탭 선택 변경 시 색상 재설정
+    tabs.addChangeListener(e -> {
+      boolean currentThemeDark = themeManager.isDarkMode();
+      Color tabBg = currentThemeDark ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
+      Color tabFg = currentThemeDark ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+      for (int i = 0; i < tabs.getTabCount(); i++) {
+        tabs.setBackgroundAt(i, tabBg);
+        tabs.setForegroundAt(i, tabFg);
+      }
+      tabs.setBackground(tabBg);
+      tabs.setForeground(tabFg);
+      tabs.repaint();
+    });
 
     add(tabs, BorderLayout.CENTER);
 
     // 초기 테마 적용
     applyTheme();
+    
+    // 탭 색상 명시적으로 재설정 (UI 업데이트 후)
+    SwingUtilities.invokeLater(() -> {
+      boolean currentThemeDark = themeManager.isDarkMode();
+      tabs.setBackgroundAt(0, currentThemeDark ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      tabs.setBackgroundAt(1, currentThemeDark ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+      tabs.repaint();
+    });
   }
 
   @Override
@@ -66,14 +107,28 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
     
+    // TabbedPane 배경색 설정
+    UIManager.put("TabbedPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("TabbedPane.selected", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("TabbedPane.unselectedBackground", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    UIManager.put("TabbedPane.foreground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+    UIManager.put("TabbedPane.selectedForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+    
     // 탭 UI 커스터마이징 - 선택 시 시각적 변화 완전 제거
     tabs.setUI(new javax.swing.plaf.basic.BasicTabbedPaneUI() {
       @Override
       protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
                                         int x, int y, int w, int h, boolean isSelected) {
-        // 선택 여부와 관계없이 동일한 배경색 사용
-        g.setColor(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        // 선택 여부와 관계없이 동일한 배경색 사용 (명시적으로 설정)
+        // 라이트 모드에서는 밝은 색상 강제 사용
+        Color bgColor = isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
+        g.setColor(bgColor);
         g.fillRect(x, y, w, h);
+        // 탭 배경색도 명시적으로 설정 (즉시 적용)
+        if (tabIndex < tabs.getTabCount()) {
+          tabs.setBackgroundAt(tabIndex, bgColor);
+          tabs.setForegroundAt(tabIndex, isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        }
       }
 
       @Override
@@ -98,15 +153,50 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
       @Override
       protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
                                int tabIndex, String title, Rectangle textRect, boolean isSelected) {
-        // 선택 여부와 관계없이 동일한 텍스트 색상 사용
-        g.setColor(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
-        super.paintText(g, tabPlacement, font, metrics, tabIndex, title, textRect, isSelected);
+        // 선택 여부와 관계없이 동일한 텍스트 색상 사용 (명시적으로 그리기)
+        Color textColor = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        g.setColor(textColor);
+        g.setFont(font);
+        int x = textRect.x;
+        int y = textRect.y + metrics.getAscent();
+        g.drawString(title, x, y);
+      }
+      
+      @Override
+      public void paint(Graphics g, JComponent c) {
+        // 전체 탭을 그리기 전에 색상 강제 설정
+        Color bgColor = isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
+        Color fgColor = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+          tabs.setBackgroundAt(i, bgColor);
+          tabs.setForegroundAt(i, fgColor);
+        }
+        // 탭 배경도 강제로 설정
+        tabs.setBackground(bgColor);
+        super.paint(g, c);
+        // 그린 후에도 다시 색상 확인
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+          tabs.setBackgroundAt(i, bgColor);
+          tabs.setForegroundAt(i, fgColor);
+        }
       }
     });
 
     // 배경색 설정
     getContentPane().setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     tabs.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+    tabs.setOpaque(true);
+    
+    // 탭 배경색과 텍스트 색상 명시적으로 설정 (모든 탭에 대해)
+    Color tabBg = isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
+    Color tabFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+    for (int i = 0; i < tabs.getTabCount(); i++) {
+      tabs.setBackgroundAt(i, tabBg);
+      tabs.setForegroundAt(i, tabFg);
+    }
+    // 탭 전체 배경도 설정
+    tabs.setBackground(tabBg);
+    tabs.setForeground(tabFg);
     
     // 상단 패널 배경색 설정
     if (top != null) {
@@ -119,11 +209,13 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
     } else {
       themeToggleBtn.setText("☀️ 라이트모드");
       themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
     }
     
     // 패널들에 테마 적용
@@ -164,13 +256,19 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
         JButton btn = (JButton) comp;
         if (btn == themeToggleBtn) continue; // 테마 버튼은 이미 처리됨
         
-        btn.setBackground(isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
-        btn.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        // 먼저 색상 설정
+        Color bg = isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+        Color fg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+        btn.setBackground(bg);
+        btn.setForeground(fg);
         btn.setBorder(BorderFactory.createLineBorder(
           isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1
         ));
         btn.setFocusPainted(false);
+        // 호버 효과 완전 제거 (색상 설정 후 적용)
         ThemeManager.disableButtonPressedEffect(btn);
+        // 테마 변경 시 색상 업데이트
+        ThemeManager.updateButtonColors(btn, bg, fg);
       }
     }
   }
@@ -186,7 +284,19 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     JPasswordField password = new JPasswordField();
     JLabel status = new JLabel(" ");
     JButton submit = new JButton("회원가입");
+    
+    // 초기 색상 설정 (현재 테마에 맞게)
+    boolean currentDarkMode = themeManager.isDarkMode();
+    submit.setBackground(currentDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+    submit.setForeground(currentDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+    submit.setBorder(BorderFactory.createLineBorder(
+        currentDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    submit.setFocusPainted(false);
+    
     ThemeManager.disableButtonPressedEffect(submit);
+    ThemeManager.updateButtonColors(submit, 
+        currentDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2,
+        currentDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
 
     int row = 0;
 
@@ -243,6 +353,19 @@ public class AuthFrame extends JFrame implements ThemeManager.ThemeChangeListene
     JPasswordField password = new JPasswordField();
     JLabel status = new JLabel(" ");
     JButton submit = new JButton("로그인");
+    
+    // 초기 색상 설정 (현재 테마에 맞게)
+    boolean currentDarkMode = themeManager.isDarkMode();
+    submit.setBackground(currentDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
+    submit.setForeground(currentDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+    submit.setBorder(BorderFactory.createLineBorder(
+        currentDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER, 1));
+    submit.setFocusPainted(false);
+    
+    ThemeManager.disableButtonPressedEffect(submit);
+    ThemeManager.updateButtonColors(submit, 
+        currentDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2,
+        currentDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
 
     int row = 0;
 
