@@ -297,12 +297,20 @@ public class NetworkDiscovery {
                         String ngrokUrl = parts.length > 1 ? parts[1] : null;
                         
                         // 자신의 서버가 아닌 경우 즉시 반환
-                        if (!ip.equals(localIP) && !ip.equals("localhost") && !responderIP.equals(localIP)) {
+                        // responderIP와 localIP를 비교하여 다른 서버인지 확인
+                        boolean isOtherServer = !ip.equals(localIP) && 
+                                               !ip.equals("localhost") && 
+                                               !responderIP.equals(localIP) &&
+                                               !responderIP.equals("127.0.0.1");
+                        
+                        if (isOtherServer) {
                             System.out.println("✅ 다른 영상통화 서버 발견: " + ip + ":" + port + 
-                                (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : ""));
+                                (ngrokUrl != null && !ngrokUrl.isEmpty() ? " (ngrok: " + ngrokUrl + ")" : ""));
+                            System.out.println("   응답자 IP: " + responderIP + " (내 IP: " + localIP + ")");
                             return new VideoServerInfo(ip, port, ngrokUrl);
                         } else {
-                            System.out.println("⚠️  자신의 서버입니다: " + ip + ":" + port + " (계속 찾는 중...)");
+                            System.out.println("⚠️  자신의 서버입니다: " + ip + ":" + port + 
+                                " (응답자: " + responderIP + ", 내 IP: " + localIP + ") - 계속 찾는 중...");
                         }
                     }
                 } catch (SocketTimeoutException e) {

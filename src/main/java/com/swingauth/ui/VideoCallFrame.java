@@ -161,8 +161,47 @@ public class VideoCallFrame extends JFrame {
                     }
                 } else {
                     // 서버를 찾지 못했으면 로컬 서버 시작
-                    System.out.println("[VideoCallFrame] 서버를 찾지 못했습니다. 로컬 서버를 시작합니다...");
-                    startLocalServer(username, isDarkMode);
+                    // 하지만 다른 서버가 있을 수 있으므로 조금 더 기다려봅니다
+                    System.out.println("[VideoCallFrame] 서버를 찾지 못했습니다. 재시도 중...");
+                    
+                    // 재시도 (서버가 시작되는 시간이 필요할 수 있음)
+                    Thread retryThread = new Thread(() -> {
+                        try {
+                            Thread.sleep(3000); // 3초 대기
+                            NetworkDiscovery.VideoServerInfo retryServerInfo = NetworkDiscovery.discoverVideoServer(5000);
+                            
+                            SwingUtilities.invokeLater(() -> {
+                                if (retryServerInfo != null) {
+                                    // 재시도에서 서버 발견
+                                    String accessUrl = retryServerInfo.getAccessUrl();
+                                    String fullUrl = accessUrl + "/video-call.html?username=" + 
+                                        java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8) +
+                                        "&theme=" + (isDarkMode ? "dark" : "light");
+                                    
+                                    System.out.println("[VideoCallFrame] 재시도에서 서버 발견: " + accessUrl);
+                                    
+                                    try {
+                                        URI uri = new URI(fullUrl);
+                                        Desktop.getDesktop().browse(uri);
+                                    } catch (Exception ex) {
+                                        JOptionPane.showMessageDialog(this, 
+                                            "브라우저를 열 수 없습니다: " + ex.getMessage(), 
+                                            "오류", JOptionPane.ERROR_MESSAGE);
+                                        ex.printStackTrace();
+                                        dispose();
+                                    }
+                                } else {
+                                    // 여전히 서버를 찾지 못했으면 로컬 서버 시작
+                                    System.out.println("[VideoCallFrame] 서버를 찾지 못했습니다. 로컬 서버를 시작합니다...");
+                                    startLocalServer(username, isDarkMode, false); // ngrok 실행 안 함 (서버가 아니므로)
+                                }
+                            });
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
+                    retryThread.setDaemon(true);
+                    retryThread.start();
                 }
             });
         });
@@ -172,10 +211,19 @@ public class VideoCallFrame extends JFrame {
     
     /**
      * 로컬 서버 시작 (서버를 찾지 못한 경우)
+     * @param username 사용자명
+     * @param isDarkMode 다크 모드 여부
+     * @param startNgrok ngrok을 실행할지 여부 (서버인 경우만 true)
      */
-    private void startLocalServer(String username, boolean isDarkMode) {
+    private void startLocalServer(String username, boolean isDarkMode, boolean startNgrok) {
         try {
             // 서버 시작 (이미 실행 중이면 그대로 사용)
+            // 하지만 ngrok은 서버인 경우에만 실행
+            if (!startNgrok) {
+                System.out.println("[VideoCallFrame] 클라이언트 모드: ngrok을 실행하지 않습니다.");
+                System.out.println("[VideoCallFrame] 서버 컴퓨터에서 ngrok이 실행 중인지 확인하세요.");
+            }
+            
             serverLauncher.start();
             System.out.println("[VideoCallFrame] 로컬 서버 시작 완료");
             
@@ -191,7 +239,7 @@ public class VideoCallFrame extends JFrame {
                 return;
             }
             
-            // ngrok URL 확인
+            // ngrok URL 확인 (서버의 ngrok URL 사용)
             String ngrokUrl = serverLauncher.getNgrokUrl();
             String accessUrl;
             if (ngrokUrl != null) {
@@ -199,6 +247,10 @@ public class VideoCallFrame extends JFrame {
                 System.out.println("[VideoCallFrame] ngrok HTTPS URL 감지: " + ngrokUrl);
             } else {
                 accessUrl = "http://localhost:" + port;
+                if (!startNgrok) {
+                    System.out.println("[VideoCallFrame] ⚠️  ngrok이 실행되지 않았습니다.");
+                    System.out.println("[VideoCallFrame]    서버 컴퓨터에서 ngrok을 실행하세요: ngrok http " + port);
+                }
             }
             
             String fullUrl = accessUrl + "/video-call.html?username=" + 

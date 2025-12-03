@@ -286,9 +286,22 @@ public class ServerLauncher {
                     System.err.println("포트를 가져오는 중 오류: " + e.getMessage());
                 }
             }
+            
+            // 이미 실행 중인 서버의 ngrok URL 확인
+            String existingNgrokUrl = NgrokUtil.getNgrokHttpsUrl();
+            localIpAddress = findLocalIpAddress();
+            
+            // 네트워크 브로드캐스트 업데이트 (ngrok URL 포함)
+            if (port > 0) {
+                NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, existingNgrokUrl);
+            }
+            
             System.out.println("========================================");
             System.out.println("서버가 이미 실행 중입니다. 포트: " + port);
             System.out.println("접속 URL: http://localhost:" + port + "/video-call.html");
+            if (existingNgrokUrl != null) {
+                System.out.println("HTTPS 접속 (ngrok): " + existingNgrokUrl + "/video-call.html");
+            }
             System.out.println("========================================");
             return;
         }
@@ -543,8 +556,12 @@ public class ServerLauncher {
         // 포트를 파일에 저장 (이미 저장되어 있어도 덮어쓰기)
         savePortToFile(port);
         
-        // ngrok 자동 실행 시도
-        startNgrok(port);
+        // ngrok 자동 실행 시도 (서버가 처음 시작된 경우에만)
+        // 다른 서버가 이미 실행 중이면 ngrok을 실행하지 않음
+        if (server.isStarted() && port > 0) {
+            // 서버가 새로 시작된 경우에만 ngrok 실행
+            startNgrok(port);
+        }
         
         // 잠시 대기 후 ngrok URL 감지 (ngrok이 시작되는 시간 필요)
         String ngrokUrl = null;
