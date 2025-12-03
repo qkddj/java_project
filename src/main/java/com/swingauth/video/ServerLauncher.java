@@ -604,16 +604,31 @@ public class ServerLauncher {
      * ngrok 자동 실행
      */
     private void startNgrok(int port) {
-        // 이미 ngrok이 실행 중인지 확인
-        if (NgrokUtil.isNgrokRunning()) {
-            System.out.println("[ServerLauncher] ngrok이 이미 실행 중입니다.");
-            return;
+        // 기존 ngrok 프로세스 종료
+        if (ngrokProcess != null && ngrokProcess.isAlive()) {
+            System.out.println("[ServerLauncher] 기존 ngrok 프로세스 종료 중...");
+            ngrokProcess.destroy();
+            try {
+                if (!ngrokProcess.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    ngrokProcess.destroyForcibly();
+                }
+            } catch (InterruptedException e) {
+                ngrokProcess.destroyForcibly();
+                Thread.currentThread().interrupt();
+            }
+            ngrokProcess = null;
         }
         
-        // ngrok 프로세스가 이미 실행 중이면 중지
-        if (ngrokProcess != null && ngrokProcess.isAlive()) {
-            System.out.println("[ServerLauncher] 기존 ngrok 프로세스가 실행 중입니다.");
-            return;
+        // 기존 ngrok 프로세스가 실행 중인지 확인하고 종료
+        if (NgrokUtil.isNgrokRunning()) {
+            System.out.println("[ServerLauncher] 기존 ngrok 프로세스가 실행 중입니다. 종료 후 재시작합니다...");
+            killExistingNgrokProcesses();
+            // 프로세스 종료 대기
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         
         Thread ngrokThread = new Thread(() -> {
@@ -629,13 +644,31 @@ public class ServerLauncher {
                     return;
                 }
                 
-                // ngrok 실행
-                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port));
+                // ngrok 실행 (기존 터널 종료 옵션 추가)
+                // --log=stdout: ngrok 로그를 표준 출력으로
+                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port), "--log=stdout");
                 pb.redirectErrorStream(true);
-                ngrokProcess = pb.start();
                 
-                System.out.println("[ServerLauncher] ✅ ngrok 실행 시작됨");
-                System.out.println("[ServerLauncher]    ngrok이 시작되는 동안 잠시 기다려주세요...");
+                // 기존 ngrok이 실행 중이면 에러가 발생할 수 있으므로, 
+                // 프로세스 시작 후 에러 확인
+                try {
+                    ngrokProcess = pb.start();
+                    
+                    System.out.println("[ServerLauncher] ✅ ngrok 실행 시작됨");
+                    System.out.println("[ServerLauncher]    ngrok이 시작되는 동안 잠시 기다려주세요...");
+                } catch (Exception e) {
+                    // ngrok 실행 실패 시 기존 프로세스 종료 후 재시도
+                    System.out.println("[ServerLauncher] ngrok 실행 실패, 기존 프로세스 종료 후 재시도...");
+                    killExistingNgrokProcesses();
+                    try {
+                        Thread.sleep(2000); // 2초 대기
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                    // 재시도
+                    ngrokProcess = pb.start();
+                    System.out.println("[ServerLauncher] ✅ ngrok 재시작 완료");
+                }
                 
                 // ngrok 프로세스 출력을 읽어서 로그에 표시 (선택사항)
                 Thread outputThread = new Thread(() -> {
@@ -715,6 +748,38 @@ public class ServerLauncher {
         }
         
         return null;
+    }
+    
+    /**
+     * 기존 ngrok 프로세스 종료
+     */
+    private void killExistingNgrokProcesses() {
+        String os = System.getProperty("os.name").toLowerCase();
+        try {
+            if (os.contains("win")) {
+                // Windows: taskkill 사용
+                Process killProcess = Runtime.getRuntime().exec("taskkill /F /IM ngrok.exe");
+                killProcess.waitFor();
+            } else {
+                // macOS/Linux: pkill 또는 killall 사용
+                try {
+                    Process killProcess = Runtime.getRuntime().exec("pkill -f ngrok");
+                    killProcess.waitFor();
+                } catch (Exception e) {
+                    // pkill 실패 시 killall 시도
+                    try {
+                        Process killProcess = Runtime.getRuntime().exec("killall ngrok");
+                        killProcess.waitFor();
+                    } catch (Exception e2) {
+                        System.err.println("[ServerLauncher] ngrok 프로세스 종료 실패: " + e2.getMessage());
+                    }
+                }
+            }
+            System.out.println("[ServerLauncher] 기존 ngrok 프로세스 종료 완료");
+        } catch (Exception e) {
+            System.err.println("[ServerLauncher] ngrok 프로세스 종료 중 오류: " + e.getMessage());
+            System.out.println("[ServerLauncher] 수동으로 ngrok을 종료한 후 다시 시도하세요.");
+        }
     }
 
     public void stop() throws Exception {
