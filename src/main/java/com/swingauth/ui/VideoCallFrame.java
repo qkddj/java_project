@@ -125,7 +125,8 @@ public class VideoCallFrame extends JFrame {
             });
             
             System.out.println("[VideoCallFrame] 네트워크에서 영상통화 서버를 자동으로 찾는 중...");
-            NetworkDiscovery.VideoServerInfo serverInfo = NetworkDiscovery.discoverVideoServer(10000); // 10초 동안 찾기
+            System.out.println("[VideoCallFrame] 같은 네트워크에 서버가 실행 중인지 확인하세요...");
+            NetworkDiscovery.VideoServerInfo serverInfo = NetworkDiscovery.discoverVideoServer(15000); // 15초 동안 찾기 (시간 증가)
             
             SwingUtilities.invokeLater(() -> {
                 if (serverInfo != null) {
