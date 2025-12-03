@@ -3,7 +3,7 @@ package com.swingauth.util;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Enumeration;
 
 /**
  * 같은 네트워크에서 채팅 서버를 자동으로 찾는 유틸리티
@@ -208,10 +208,6 @@ public class NetworkDiscovery {
      * 영상통화 서버 브로드캐스트 시작 (ngrok URL 포함)
      */
     public static void startVideoServerBroadcast(String serverIP, int port, String ngrokUrl) {
-        // 리스너 시작 (요청에 응답)
-        startVideoServerListener(serverIP, port, ngrokUrl);
-        
-        // 브로드캐스트 시작 (주기적으로 알림)
         Thread broadcastThread = new Thread(() -> {
             try (DatagramSocket socket = new DatagramSocket()) {
                 socket.setBroadcast(true);
@@ -223,64 +219,21 @@ public class NetworkDiscovery {
                 }
                 
                 byte[] message = (VIDEO_RESPONSE_PREFIX + serverInfo).getBytes(StandardCharsets.UTF_8);
+                InetAddress broadcast = InetAddress.getByName("255.255.255.255");
+                DatagramPacket packet = new DatagramPacket(message, message.length, broadcast, VIDEO_DISCOVERY_PORT);
                 
-                // 모든 네트워크 인터페이스로 브로드캐스트 시도
-                java.util.List<InetAddress> broadcastAddresses = new java.util.ArrayList<>();
-                broadcastAddresses.add(InetAddress.getByName("255.255.255.255")); // 전체 브로드캐스트
+                System.out.println("🔔 영상통화 서버 브로드캐스트 시작: " + serverIP + ":" + port + 
+                    (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : "") + 
+                    " (포트 " + VIDEO_DISCOVERY_PORT + ") - 2초마다 자동 전송 중...");
                 
-                // 각 네트워크 인터페이스의 브로드캐스트 주소 추가
-                try {
-                    Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-                    while (interfaces.hasMoreElements()) {
-                        NetworkInterface networkInterface = interfaces.nextElement();
-                        if (networkInterface.isLoopback() || !networkInterface.isUp()) {
-                            continue;
-                        }
-                        for (InterfaceAddress ifAddr : networkInterface.getInterfaceAddresses()) {
-                            InetAddress broadcast = ifAddr.getBroadcast();
-                            if (broadcast != null) {
-                                broadcastAddresses.add(broadcast);
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("브로드캐스트 주소 수집 실패: " + e.getMessage());
-                }
-                
-                System.out.println("🔔 영상통화 서버 브로드캐스트 시작:");
-                System.out.println("   서버 주소: " + serverIP + ":" + port + " (실제 서버 포트)");
-                System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
-                if (ngrokUrl != null) {
-                    System.out.println("   ngrok URL: " + ngrokUrl);
-                }
-                System.out.println("   브로드캐스트 주소: " + broadcastAddresses.size() + "개 - 2초마다 자동 전송 중...");
-                
-                int broadcastCount = 0;
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
-                        // 모든 브로드캐스트 주소로 전송
-                        for (InetAddress broadcast : broadcastAddresses) {
-                            try {
-                                DatagramPacket packet = new DatagramPacket(message, message.length, broadcast, VIDEO_DISCOVERY_PORT);
-                                socket.send(packet);
-                            } catch (Exception e) {
-                                // 일부 인터페이스 실패는 무시
-                            }
-                        }
-                        broadcastCount++;
-                        if (broadcastCount % 5 == 0) {
-                            System.out.println("   브로드캐스트 전송 중... (" + broadcastCount + "회)");
-                        }
+                        socket.send(packet);
                         Thread.sleep(2000); // 2초마다 브로드캐스트
                     } catch (InterruptedException e) {
                         break;
-                    } catch (Exception e) {
-                        // IOException 또는 기타 예외 처리
-                        if (e instanceof IOException) {
-                            System.err.println("영상통화 서버 브로드캐스트 전송 오류: " + e.getMessage());
-                        } else {
-                            System.err.println("영상통화 서버 브로드캐스트 오류: " + e.getMessage());
-                        }
+                    } catch (IOException e) {
+                        System.err.println("영상통화 서버 브로드캐스트 전송 오류: " + e.getMessage());
                         try {
                             Thread.sleep(2000);
                         } catch (InterruptedException ie) {
@@ -288,7 +241,7 @@ public class NetworkDiscovery {
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 System.err.println("영상통화 서버 브로드캐스트 실패: " + e.getMessage());
                 e.printStackTrace();
             }
@@ -298,117 +251,11 @@ public class NetworkDiscovery {
     }
     
     /**
-     * 영상통화 서버 리스너 시작 (요청에 응답)
-     */
-    public static void startVideoServerListener(String serverIP, int port, String ngrokUrl) {
-        Thread listenerThread = new Thread(() -> {
-            try (DatagramSocket socket = new DatagramSocket(VIDEO_DISCOVERY_PORT)) {
-                socket.setBroadcast(true);
-                socket.setSoTimeout(0); // 무한 대기
-                byte[] buffer = new byte[1024];
-                
-                System.out.println("👂 영상통화 서버 리스너 시작:");
-                System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
-                System.out.println("   실제 서버: " + serverIP + ":" + port + " (HTTP 서버 포트)");
-                
-                while (!Thread.currentThread().isInterrupted()) {
-                    try {
-                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                        socket.receive(packet);
-                        
-                        String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
-                        String clientIP = packet.getAddress().getHostAddress();
-                        
-                        // 응답 메시지는 무시 (무한 루프 방지)
-                        if (message.startsWith(VIDEO_RESPONSE_PREFIX)) {
-                            continue;
-                        }
-                        
-                        // 자신이 보낸 메시지인지 확인 (더 유연하게)
-                        // localhost나 127.0.0.1이면 자신의 메시지로 간주
-                        boolean isOwnMessage = clientIP.equals("127.0.0.1") || 
-                                              clientIP.equals("localhost") ||
-                                              (serverIP != null && clientIP.equals(serverIP));
-                        
-                        if (isOwnMessage) {
-                            System.out.println("⚠️  자신의 메시지 무시: " + message + " (from: " + clientIP + ")");
-                            continue;
-                        }
-                        
-                        System.out.println("📨 영상통화 서버 발견 요청 수신: " + message + " (요청자: " + clientIP + ")");
-                        
-                        if (VIDEO_DISCOVERY_MESSAGE.equals(message)) {
-                            // 서버 정보 응답 전송
-                            String serverInfo = serverIP + ":" + port;
-                            if (ngrokUrl != null && !ngrokUrl.isEmpty()) {
-                                serverInfo += "|" + ngrokUrl;
-                            }
-                            
-                            byte[] response = (VIDEO_RESPONSE_PREFIX + serverInfo).getBytes(StandardCharsets.UTF_8);
-                            DatagramPacket responsePacket = new DatagramPacket(
-                                response, response.length, 
-                                packet.getAddress(), packet.getPort()
-                            );
-                            socket.send(responsePacket);
-                            System.out.println("✅ 영상통화 서버 발견 요청에 응답 전송: " + serverIP + ":" + port + 
-                                (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : "") + " → " + clientIP);
-                        } else {
-                            System.out.println("⚠️  알 수 없는 메시지: " + message + " (요청자: " + clientIP + ")");
-                        }
-                    } catch (IOException e) {
-                        if (!socket.isClosed()) {
-                            System.err.println("영상통화 서버 리스너 오류: " + e.getMessage());
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            } catch (SocketException e) {
-                System.err.println("영상통화 서버 리스너 시작 실패: " + e.getMessage());
-                if (e.getMessage().contains("Address already in use")) {
-                    System.err.println("⚠️  포트 " + VIDEO_DISCOVERY_PORT + "가 이미 사용 중입니다.");
-                    System.err.println("   다른 프로세스가 포트를 사용 중이거나 이미 리스너가 실행 중일 수 있습니다.");
-                }
-                e.printStackTrace();
-            }
-        });
-        listenerThread.setDaemon(true);
-        listenerThread.start();
-    }
-    
-    /**
      * 영상통화 서버 발견 (ngrok URL 포함)
      * @return VideoServerInfo 객체 (서버 IP, 포트, ngrok URL 포함)
      */
     public static VideoServerInfo discoverVideoServer(int timeoutMs) {
         String localIP = detectLocalIP();
-        java.util.Set<String> localIPs = new java.util.HashSet<>();
-        localIPs.add(localIP);
-        localIPs.add("localhost");
-        localIPs.add("127.0.0.1");
-        
-        // 모든 로컬 IP 주소 수집
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = interfaces.nextElement();
-                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
-                    continue;
-                }
-                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
-                while (addresses.hasMoreElements()) {
-                    InetAddress address = addresses.nextElement();
-                    if (!address.isLoopbackAddress() && address instanceof java.net.Inet4Address) {
-                        localIPs.add(address.getHostAddress());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // 무시
-        }
-        
-            System.out.println("🔍 네트워크에서 영상통화 서버 찾는 중... (최대 " + (timeoutMs / 1000) + "초)");
-            System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
-            System.out.println("   내 IP 목록: " + String.join(", ", localIPs));
         
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
@@ -423,19 +270,17 @@ public class NetworkDiscovery {
             
             long startTime = System.currentTimeMillis();
             int attempts = 0;
-            int requestCount = 0;
+            
+            System.out.println("🔍 네트워크에서 영상통화 서버 찾는 중... (최대 " + (timeoutMs / 1000) + "초)");
             
             while (System.currentTimeMillis() - startTime < timeoutMs) {
                 try {
-                    // 요청 전송 (1초마다)
                     if (attempts % 2 == 0) {
                         socket.send(requestPacket);
-                        requestCount++;
-                        System.out.println("📤 영상통화 서버 발견 요청 전송... (요청 " + requestCount + "회)");
+                        System.out.println("📤 영상통화 서버 발견 요청 전송... (시도 " + (attempts / 2 + 1) + ")");
                     }
                     attempts++;
                     
-                    // 응답 대기 (타임아웃 1초)
                     socket.receive(responsePacket);
                     String response = new String(responsePacket.getData(), 0, responsePacket.getLength(), StandardCharsets.UTF_8);
                     String responderIP = responsePacket.getAddress().getHostAddress();
@@ -449,40 +294,19 @@ public class NetworkDiscovery {
                         String[] ipPort = serverIP.split(":");
                         String ip = ipPort[0];
                         int port = Integer.parseInt(ipPort[1]);
-                        String ngrokUrl = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
+                        String ngrokUrl = parts.length > 1 ? parts[1] : null;
                         
-                        // 자신의 서버가 아닌 경우 확인
-                        // responderIP와 serverIP 모두 로컬 IP 목록에 없어야 함
-                        boolean isOtherServer = !localIPs.contains(ip) && 
-                                               !localIPs.contains(responderIP) &&
-                                               !responderIP.equals("127.0.0.1");
-                        
-                        // ngrok URL이 필수 - 없으면 건너뛰기
-                        if (ngrokUrl == null || ngrokUrl.isEmpty()) {
-                            System.out.println("⚠️  서버를 발견했지만 ngrok URL이 없습니다: " + ip + ":" + port + 
-                                " - 계속 찾는 중...");
-                            continue; // ngrok URL이 없으면 다음 서버 찾기
-                        }
-                        
-                        if (isOtherServer) {
+                        // 자신의 서버가 아닌 경우 즉시 반환
+                        if (!ip.equals(localIP) && !ip.equals("localhost") && !responderIP.equals(localIP)) {
                             System.out.println("✅ 다른 영상통화 서버 발견: " + ip + ":" + port + 
-                                " (ngrok: " + ngrokUrl + ")");
-                            System.out.println("   응답자 IP: " + responderIP + " (내 IP 목록: " + String.join(", ", localIPs) + ")");
+                                (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : ""));
                             return new VideoServerInfo(ip, port, ngrokUrl);
                         } else {
-                            System.out.println("⚠️  자신의 서버입니다: " + ip + ":" + port + 
-                                " (응답자: " + responderIP + ", 내 IP 목록에 포함됨) - 계속 찾는 중...");
+                            System.out.println("⚠️  자신의 서버입니다: " + ip + ":" + port + " (계속 찾는 중...)");
                         }
-                    } else {
-                        System.out.println("⚠️  알 수 없는 응답 형식: " + response);
                     }
                 } catch (SocketTimeoutException e) {
-                    // 타임아웃 - 계속 시도 (정상적인 동작)
-                    long elapsed = System.currentTimeMillis() - startTime;
-                    if (elapsed > 5000 && requestCount < 3) {
-                        // 5초 이상 지났는데 요청이 적으면 더 자주 전송
-                        System.out.println("⏳ 서버 응답 대기 중... (경과: " + (elapsed / 1000) + "초)");
-                    }
+                    // 타임아웃 - 계속 시도
                 } catch (IOException e) {
                     System.err.println("영상통화 서버 발견 중 오류: " + e.getMessage());
                     try {
@@ -493,12 +317,7 @@ public class NetworkDiscovery {
                 }
             }
             
-            System.out.println("❌ 영상통화 서버를 찾을 수 없습니다. (타임아웃: " + timeoutMs + "ms, 요청: " + requestCount + "회)");
-            System.out.println("   확인 사항:");
-            System.out.println("   1. 서버 컴퓨터에서 프로그램이 실행 중인지 확인");
-            System.out.println("   2. 같은 네트워크(Wi-Fi)에 연결되어 있는지 확인");
-            System.out.println("   3. 방화벽에서 발견 포트 " + VIDEO_DISCOVERY_PORT + " (UDP)가 막혀있지 않은지 확인");
-            System.out.println("   참고: 발견 포트 " + VIDEO_DISCOVERY_PORT + "는 네트워크 발견용이며, 실제 서버 포트와는 다릅니다.");
+            System.out.println("❌ 영상통화 서버를 찾을 수 없습니다. (타임아웃: " + timeoutMs + "ms)");
         } catch (IOException e) {
             System.err.println("영상통화 서버 발견 실패: " + e.getMessage());
             e.printStackTrace();
@@ -521,21 +340,13 @@ public class NetworkDiscovery {
         }
         
         /**
-         * 접속할 URL 반환 (ngrok HTTPS만 사용)
+         * 접속할 URL 반환 (ngrok이 있으면 HTTPS, 없으면 HTTP)
          */
         public String getAccessUrl() {
             if (ngrokUrl != null && !ngrokUrl.isEmpty()) {
                 return ngrokUrl;
             }
-            // ngrok URL이 없으면 null 반환 (HTTP 사용 안 함)
-            return null;
-        }
-        
-        /**
-         * ngrok URL이 있는지 확인
-         */
-        public boolean hasNgrokUrl() {
-            return ngrokUrl != null && !ngrokUrl.isEmpty();
+            return "http://" + ip + ":" + port;
         }
     }
     

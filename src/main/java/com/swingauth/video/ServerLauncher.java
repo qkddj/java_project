@@ -286,25 +286,9 @@ public class ServerLauncher {
                     System.err.println("포트를 가져오는 중 오류: " + e.getMessage());
                 }
             }
-            
-            // 이미 실행 중인 서버의 ngrok URL 확인
-            String existingNgrokUrl = NgrokUtil.getNgrokHttpsUrl();
-            localIpAddress = findLocalIpAddress();
-            
-            // 네트워크 브로드캐스트 업데이트 (ngrok URL 포함)
-            if (port > 0) {
-                NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, existingNgrokUrl);
-            }
-            
             System.out.println("========================================");
-            System.out.println("서버가 이미 실행 중입니다.");
-            System.out.println("실제 서버 포트: " + port + " (HTTP 서버)");
-            System.out.println("네트워크 발견 포트: 3003 (UDP 브로드캐스트용)");
+            System.out.println("서버가 이미 실행 중입니다. 포트: " + port);
             System.out.println("접속 URL: http://localhost:" + port + "/video-call.html");
-            if (existingNgrokUrl != null) {
-                System.out.println("HTTPS 접속 (ngrok): " + existingNgrokUrl + "/video-call.html");
-                System.out.println("   ngrok 실행 명령: ngrok http " + port);
-            }
             System.out.println("========================================");
             return;
         }
@@ -559,12 +543,8 @@ public class ServerLauncher {
         // 포트를 파일에 저장 (이미 저장되어 있어도 덮어쓰기)
         savePortToFile(port);
         
-        // ngrok 자동 실행 시도 (서버가 처음 시작된 경우에만)
-        // 다른 서버가 이미 실행 중이면 ngrok을 실행하지 않음
-        if (server.isStarted() && port > 0) {
-            // 서버가 새로 시작된 경우에만 ngrok 실행
-            startNgrok(port);
-        }
+        // ngrok 자동 실행 시도
+        startNgrok(port);
         
         // 잠시 대기 후 ngrok URL 감지 (ngrok이 시작되는 시간 필요)
         String ngrokUrl = null;
@@ -586,13 +566,11 @@ public class ServerLauncher {
         
         System.out.println("========================================");
         System.out.println("비디오 통화 서버 시작 완료!");
-        System.out.println("실제 서버 포트: " + port + " (HTTP 서버)");
-        System.out.println("네트워크 발견 포트: 3003 (UDP 브로드캐스트용)");
+        System.out.println("포트: " + port);
         System.out.println("로컬 접속: http://localhost:" + port + "/video-call.html");
         if (ngrokUrl != null) {
             System.out.println("HTTPS 접속 (ngrok): " + ngrokUrl + "/video-call.html");
             System.out.println("✅ 다른 컴퓨터에서 위 HTTPS URL로 접속하면 카메라/마이크 사용 가능!");
-            System.out.println("   ngrok 실행 명령: ngrok http " + port);
         } else {
             System.out.println("⚠️  ngrok이 실행되지 않았습니다. 수동으로 실행하려면:");
             System.out.println("   ngrok http " + port);
@@ -626,31 +604,16 @@ public class ServerLauncher {
      * ngrok 자동 실행
      */
     private void startNgrok(int port) {
-        // 기존 ngrok 프로세스 종료
-        if (ngrokProcess != null && ngrokProcess.isAlive()) {
-            System.out.println("[ServerLauncher] 기존 ngrok 프로세스 종료 중...");
-            ngrokProcess.destroy();
-            try {
-                if (!ngrokProcess.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                    ngrokProcess.destroyForcibly();
-                }
-            } catch (InterruptedException e) {
-                ngrokProcess.destroyForcibly();
-                Thread.currentThread().interrupt();
-            }
-            ngrokProcess = null;
+        // 이미 ngrok이 실행 중인지 확인
+        if (NgrokUtil.isNgrokRunning()) {
+            System.out.println("[ServerLauncher] ngrok이 이미 실행 중입니다.");
+            return;
         }
         
-        // 기존 ngrok 프로세스가 실행 중인지 확인하고 종료
-        if (NgrokUtil.isNgrokRunning()) {
-            System.out.println("[ServerLauncher] 기존 ngrok 프로세스가 실행 중입니다. 종료 후 재시작합니다...");
-            killExistingNgrokProcesses();
-            // 프로세스 종료 대기
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        // ngrok 프로세스가 이미 실행 중이면 중지
+        if (ngrokProcess != null && ngrokProcess.isAlive()) {
+            System.out.println("[ServerLauncher] 기존 ngrok 프로세스가 실행 중입니다.");
+            return;
         }
         
         Thread ngrokThread = new Thread(() -> {
@@ -666,31 +629,13 @@ public class ServerLauncher {
                     return;
                 }
                 
-                // ngrok 실행 (기존 터널 종료 옵션 추가)
-                // --log=stdout: ngrok 로그를 표준 출력으로
-                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port), "--log=stdout");
+                // ngrok 실행
+                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port));
                 pb.redirectErrorStream(true);
+                ngrokProcess = pb.start();
                 
-                // 기존 ngrok이 실행 중이면 에러가 발생할 수 있으므로, 
-                // 프로세스 시작 후 에러 확인
-                try {
-                    ngrokProcess = pb.start();
-                    
-                    System.out.println("[ServerLauncher] ✅ ngrok 실행 시작됨");
-                    System.out.println("[ServerLauncher]    ngrok이 시작되는 동안 잠시 기다려주세요...");
-                } catch (Exception e) {
-                    // ngrok 실행 실패 시 기존 프로세스 종료 후 재시도
-                    System.out.println("[ServerLauncher] ngrok 실행 실패, 기존 프로세스 종료 후 재시도...");
-                    killExistingNgrokProcesses();
-                    try {
-                        Thread.sleep(2000); // 2초 대기
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
-                    // 재시도
-                    ngrokProcess = pb.start();
-                    System.out.println("[ServerLauncher] ✅ ngrok 재시작 완료");
-                }
+                System.out.println("[ServerLauncher] ✅ ngrok 실행 시작됨");
+                System.out.println("[ServerLauncher]    ngrok이 시작되는 동안 잠시 기다려주세요...");
                 
                 // ngrok 프로세스 출력을 읽어서 로그에 표시 (선택사항)
                 Thread outputThread = new Thread(() -> {
@@ -770,38 +715,6 @@ public class ServerLauncher {
         }
         
         return null;
-    }
-    
-    /**
-     * 기존 ngrok 프로세스 종료
-     */
-    private void killExistingNgrokProcesses() {
-        String os = System.getProperty("os.name").toLowerCase();
-        try {
-            if (os.contains("win")) {
-                // Windows: taskkill 사용
-                Process killProcess = Runtime.getRuntime().exec("taskkill /F /IM ngrok.exe");
-                killProcess.waitFor();
-            } else {
-                // macOS/Linux: pkill 또는 killall 사용
-                try {
-                    Process killProcess = Runtime.getRuntime().exec("pkill -f ngrok");
-                    killProcess.waitFor();
-                } catch (Exception e) {
-                    // pkill 실패 시 killall 시도
-                    try {
-                        Process killProcess = Runtime.getRuntime().exec("killall ngrok");
-                        killProcess.waitFor();
-                    } catch (Exception e2) {
-                        System.err.println("[ServerLauncher] ngrok 프로세스 종료 실패: " + e2.getMessage());
-                    }
-                }
-            }
-            System.out.println("[ServerLauncher] 기존 ngrok 프로세스 종료 완료");
-        } catch (Exception e) {
-            System.err.println("[ServerLauncher] ngrok 프로세스 종료 중 오류: " + e.getMessage());
-            System.out.println("[ServerLauncher] 수동으로 ngrok을 종료한 후 다시 시도하세요.");
-        }
     }
 
     public void stop() throws Exception {
