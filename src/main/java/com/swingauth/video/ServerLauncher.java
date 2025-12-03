@@ -29,6 +29,23 @@ public class ServerLauncher {
     // 고정 포트는 제거 - 파일 기반 포트 공유 방식 사용
     private Process ngrokProcess; // ngrok 프로세스 추적
 
+    /**
+     * 단일 인스턴스 생성자
+     * 애플리케이션 종료 시 ngrok/서버를 자동으로 정리하기 위해
+     * JVM shutdown hook을 등록한다.
+     */
+    private ServerLauncher() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                // 애플리케이션이 종료될 때 ngrok과 비디오 서버를 자동 종료
+                System.out.println("[ServerLauncher] JVM 종료 감지 - 비디오 서버 및 ngrok 정리 중...");
+                stop();
+            } catch (Exception e) {
+                System.err.println("[ServerLauncher] 종료 훅에서 정리 실패: " + e.getMessage());
+            }
+        }, "video-server-shutdown-hook"));
+    }
+
     public static synchronized ServerLauncher getInstance() {
         if (instance == null) {
             instance = new ServerLauncher();
