@@ -630,7 +630,14 @@ public class ServerLauncher {
                 }
                 
                 // ngrok 실행
-                ProcessBuilder pb = new ProcessBuilder(ngrokCommand, "http", String.valueOf(port));
+                // localhost가 IPv6(::1)로 해석되어 업스트림 연결이 실패하는 경우가 있어
+                // 항상 IPv4 루프백(127.0.0.1)으로 명시적으로 지정한다.
+                // 예: ERR_NGROK_8012, dial tcp [::1]:포트: connect: connection refused
+                ProcessBuilder pb = new ProcessBuilder(
+                        ngrokCommand,
+                        "http",
+                        "127.0.0.1:" + port
+                );
                 pb.redirectErrorStream(true);
                 ngrokProcess = pb.start();
                 
