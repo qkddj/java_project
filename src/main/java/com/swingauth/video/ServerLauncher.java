@@ -297,10 +297,13 @@ public class ServerLauncher {
             }
             
             System.out.println("========================================");
-            System.out.println("서버가 이미 실행 중입니다. 포트: " + port);
+            System.out.println("서버가 이미 실행 중입니다.");
+            System.out.println("실제 서버 포트: " + port + " (HTTP 서버)");
+            System.out.println("네트워크 발견 포트: 3003 (UDP 브로드캐스트용)");
             System.out.println("접속 URL: http://localhost:" + port + "/video-call.html");
             if (existingNgrokUrl != null) {
                 System.out.println("HTTPS 접속 (ngrok): " + existingNgrokUrl + "/video-call.html");
+                System.out.println("   ngrok 실행 명령: ngrok http " + port);
             }
             System.out.println("========================================");
             return;
@@ -583,11 +586,13 @@ public class ServerLauncher {
         
         System.out.println("========================================");
         System.out.println("비디오 통화 서버 시작 완료!");
-        System.out.println("포트: " + port);
+        System.out.println("실제 서버 포트: " + port + " (HTTP 서버)");
+        System.out.println("네트워크 발견 포트: 3003 (UDP 브로드캐스트용)");
         System.out.println("로컬 접속: http://localhost:" + port + "/video-call.html");
         if (ngrokUrl != null) {
             System.out.println("HTTPS 접속 (ngrok): " + ngrokUrl + "/video-call.html");
             System.out.println("✅ 다른 컴퓨터에서 위 HTTPS URL로 접속하면 카메라/마이크 사용 가능!");
+            System.out.println("   ngrok 실행 명령: ngrok http " + port);
         } else {
             System.out.println("⚠️  ngrok이 실행되지 않았습니다. 수동으로 실행하려면:");
             System.out.println("   ngrok http " + port);

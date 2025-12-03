@@ -247,10 +247,13 @@ public class NetworkDiscovery {
                     System.err.println("브로드캐스트 주소 수집 실패: " + e.getMessage());
                 }
                 
-                System.out.println("🔔 영상통화 서버 브로드캐스트 시작: " + serverIP + ":" + port + 
-                    (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : "") + 
-                    " (포트 " + VIDEO_DISCOVERY_PORT + ") - 2초마다 자동 전송 중...");
-                System.out.println("   브로드캐스트 주소: " + broadcastAddresses.size() + "개");
+                System.out.println("🔔 영상통화 서버 브로드캐스트 시작:");
+                System.out.println("   서버 주소: " + serverIP + ":" + port + " (실제 서버 포트)");
+                System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
+                if (ngrokUrl != null) {
+                    System.out.println("   ngrok URL: " + ngrokUrl);
+                }
+                System.out.println("   브로드캐스트 주소: " + broadcastAddresses.size() + "개 - 2초마다 자동 전송 중...");
                 
                 int broadcastCount = 0;
                 while (!Thread.currentThread().isInterrupted()) {
@@ -304,8 +307,9 @@ public class NetworkDiscovery {
                 socket.setSoTimeout(0); // 무한 대기
                 byte[] buffer = new byte[1024];
                 
-                System.out.println("👂 영상통화 서버 리스너 시작: 포트 " + VIDEO_DISCOVERY_PORT + "에서 요청 대기 중...");
-                System.out.println("   서버 IP: " + serverIP + ":" + port);
+                System.out.println("👂 영상통화 서버 리스너 시작:");
+                System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
+                System.out.println("   실제 서버: " + serverIP + ":" + port + " (HTTP 서버 포트)");
                 
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
@@ -402,8 +406,9 @@ public class NetworkDiscovery {
             // 무시
         }
         
-        System.out.println("🔍 네트워크에서 영상통화 서버 찾는 중... (최대 " + (timeoutMs / 1000) + "초)");
-        System.out.println("   내 IP 목록: " + String.join(", ", localIPs));
+            System.out.println("🔍 네트워크에서 영상통화 서버 찾는 중... (최대 " + (timeoutMs / 1000) + "초)");
+            System.out.println("   발견 포트: " + VIDEO_DISCOVERY_PORT + " (네트워크 발견용)");
+            System.out.println("   내 IP 목록: " + String.join(", ", localIPs));
         
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
@@ -492,7 +497,8 @@ public class NetworkDiscovery {
             System.out.println("   확인 사항:");
             System.out.println("   1. 서버 컴퓨터에서 프로그램이 실행 중인지 확인");
             System.out.println("   2. 같은 네트워크(Wi-Fi)에 연결되어 있는지 확인");
-            System.out.println("   3. 방화벽에서 포트 " + VIDEO_DISCOVERY_PORT + "가 막혀있지 않은지 확인");
+            System.out.println("   3. 방화벽에서 발견 포트 " + VIDEO_DISCOVERY_PORT + " (UDP)가 막혀있지 않은지 확인");
+            System.out.println("   참고: 발견 포트 " + VIDEO_DISCOVERY_PORT + "는 네트워크 발견용이며, 실제 서버 포트와는 다릅니다.");
         } catch (IOException e) {
             System.err.println("영상통화 서버 발견 실패: " + e.getMessage());
             e.printStackTrace();
