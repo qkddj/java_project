@@ -130,7 +130,24 @@ public class VideoCallFrame extends JFrame {
             
             SwingUtilities.invokeLater(() -> {
                 if (serverInfo != null) {
-                    // 서버를 찾았으면 ngrok URL이 있으면 HTTPS로, 없으면 HTTP로 접속
+                    // ngrok URL이 필수 - 없으면 오류 표시
+                    if (!serverInfo.hasNgrokUrl()) {
+                        System.out.println("========================================");
+                        System.out.println("[VideoCallFrame] ⚠️  서버를 발견했지만 ngrok URL이 없습니다!");
+                        System.out.println("서버 IP: " + serverInfo.ip + ":" + serverInfo.port);
+                        System.out.println("========================================");
+                        
+                        JOptionPane.showMessageDialog(this, 
+                            "서버를 발견했지만 ngrok이 실행되지 않았습니다.\n\n" +
+                            "서버 컴퓨터에서 ngrok을 실행해주세요:\n" +
+                            "ngrok http " + serverInfo.port + "\n\n" +
+                            "그 후 다시 시도해주세요.",
+                            "ngrok 필요", JOptionPane.WARNING_MESSAGE);
+                        dispose();
+                        return;
+                    }
+                    
+                    // ngrok HTTPS URL로만 접속
                     String accessUrl = serverInfo.getAccessUrl();
                     String fullUrl = accessUrl + "/video-call.html?username=" + 
                         java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8) +
@@ -139,13 +156,8 @@ public class VideoCallFrame extends JFrame {
                     System.out.println("========================================");
                     System.out.println("[VideoCallFrame] 영상통화 서버 발견!");
                     System.out.println("서버 IP: " + serverInfo.ip + ":" + serverInfo.port);
-                    if (serverInfo.ngrokUrl != null) {
-                        System.out.println("HTTPS URL (ngrok): " + serverInfo.ngrokUrl);
-                        System.out.println("✅ HTTPS로 접속 - 카메라/마이크 사용 가능!");
-                    } else {
-                        System.out.println("HTTP URL: " + accessUrl);
-                        System.out.println("⚠️  카메라/마이크 사용을 위해 서버에서 ngrok을 실행하세요");
-                    }
+                    System.out.println("HTTPS URL (ngrok): " + serverInfo.ngrokUrl);
+                    System.out.println("✅ HTTPS로 접속 - 카메라/마이크 사용 가능!");
                     System.out.println("접속 URL: " + fullUrl);
                     System.out.println("========================================");
                     
@@ -173,7 +185,18 @@ public class VideoCallFrame extends JFrame {
                             
                             SwingUtilities.invokeLater(() -> {
                                 if (retryServerInfo != null) {
-                                    // 재시도에서 서버 발견
+                                    // 재시도에서 서버 발견 - ngrok URL 필수
+                                    if (!retryServerInfo.hasNgrokUrl()) {
+                                        JOptionPane.showMessageDialog(this, 
+                                            "서버를 발견했지만 ngrok이 실행되지 않았습니다.\n\n" +
+                                            "서버 컴퓨터에서 ngrok을 실행해주세요:\n" +
+                                            "ngrok http [포트번호]\n\n" +
+                                            "그 후 다시 시도해주세요.",
+                                            "ngrok 필요", JOptionPane.WARNING_MESSAGE);
+                                        dispose();
+                                        return;
+                                    }
+                                    
                                     String accessUrl = retryServerInfo.getAccessUrl();
                                     String fullUrl = accessUrl + "/video-call.html?username=" + 
                                         java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8) +
@@ -219,12 +242,6 @@ public class VideoCallFrame extends JFrame {
     private void startLocalServer(String username, boolean isDarkMode, boolean startNgrok) {
         try {
             // 서버 시작 (이미 실행 중이면 그대로 사용)
-            // 하지만 ngrok은 서버인 경우에만 실행
-            if (!startNgrok) {
-                System.out.println("[VideoCallFrame] 클라이언트 모드: ngrok을 실행하지 않습니다.");
-                System.out.println("[VideoCallFrame] 서버 컴퓨터에서 ngrok이 실행 중인지 확인하세요.");
-            }
-            
             serverLauncher.start();
             System.out.println("[VideoCallFrame] 로컬 서버 시작 완료");
             
@@ -240,24 +257,41 @@ public class VideoCallFrame extends JFrame {
                 return;
             }
             
-            // ngrok URL 확인 (서버의 ngrok URL 사용)
-            String ngrokUrl = serverLauncher.getNgrokUrl();
-            String accessUrl;
-            if (ngrokUrl != null) {
-                accessUrl = ngrokUrl;
-                System.out.println("[VideoCallFrame] ngrok HTTPS URL 감지: " + ngrokUrl);
-            } else {
-                accessUrl = "http://localhost:" + port;
-                if (!startNgrok) {
-                    System.out.println("[VideoCallFrame] ⚠️  ngrok이 실행되지 않았습니다.");
-                    System.out.println("[VideoCallFrame]    서버 컴퓨터에서 ngrok을 실행하세요: ngrok http " + port);
+            // ngrok URL 확인 - 필수 (최대 10초 대기)
+            String ngrokUrl = null;
+            for (int i = 0; i < 20; i++) {
+                try {
+                    Thread.sleep(500); // 0.5초 대기
+                    ngrokUrl = serverLauncher.getNgrokUrl();
+                    if (ngrokUrl != null && !ngrokUrl.isEmpty()) {
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
                 }
             }
             
-            String fullUrl = accessUrl + "/video-call.html?username=" + 
+            if (ngrokUrl == null || ngrokUrl.isEmpty()) {
+                System.out.println("[VideoCallFrame] ⚠️  ngrok이 실행되지 않았습니다.");
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this, 
+                        "ngrok이 실행되지 않았습니다.\n\n" +
+                        "ngrok을 실행해주세요:\n" +
+                        "ngrok http " + port + "\n\n" +
+                        "그 후 다시 시도해주세요.",
+                        "ngrok 필요", JOptionPane.WARNING_MESSAGE);
+                });
+                dispose();
+                return;
+            }
+            
+            // ngrok HTTPS URL로만 접속
+            String fullUrl = ngrokUrl + "/video-call.html?username=" + 
                 java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8) +
                 "&theme=" + (isDarkMode ? "dark" : "light");
             
+            System.out.println("[VideoCallFrame] ngrok HTTPS URL: " + ngrokUrl);
             System.out.println("[VideoCallFrame] 접속 URL: " + fullUrl);
             
             // 브라우저로 열기
