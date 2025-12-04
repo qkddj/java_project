@@ -29,6 +29,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
   private JButton btnChat;
   private JButton btnVideo;
   private JButton themeToggleBtn;
+  private JPanel leftPanel;
   private final String[] boards = {
       "자유 게시판",
       "동네 소식 게시판",
@@ -52,6 +53,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     top.setBorder(BorderFactory.createEmptyBorder(10, 12, 0, 12));
 
     // 좌측 상단: 테마 전환 버튼
+    leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
     themeToggleBtn = new JButton("🌙 다크모드");
     themeToggleBtn.setFont(themeToggleBtn.getFont().deriveFont(Font.BOLD, 12f));
     themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -60,6 +62,8 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     themeToggleBtn.addActionListener(e -> {
       themeManager.toggleTheme();
     });
+    
+    leftPanel.add(themeToggleBtn);
     
     // ThemeManager에 리스너 등록
     themeManager.addThemeChangeListener(this);
@@ -80,7 +84,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     right.add(idAndLoc);
     right.add(logout);
 
-    top.add(themeToggleBtn, BorderLayout.WEST);
+    top.add(leftPanel, BorderLayout.WEST);
     top.add(right, BorderLayout.EAST);
     add(top, BorderLayout.NORTH);
 
@@ -176,7 +180,6 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
         // UI 스레드에서 직접 실행 (비동기 스레드 문제 해결)
         try {
             System.out.println("[MainFrame] VideoCallFrame 생성 시작...");
-            VideoCallFrame frame = new VideoCallFrame(user, themeManager.isDarkMode());
             System.out.println("[MainFrame] VideoCallFrame 생성 완료");
         } catch (Exception ex) {
             System.err.println("[MainFrame] VideoCallFrame 생성 실패: " + ex.getMessage());
@@ -261,12 +264,8 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
-      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
       
-      ThemeManager.updateButtonColors(logout, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
-      ThemeManager.updateButtonColors(btnOpen, ThemeManager.DARK_BG, ThemeManager.TEXT_LIGHT);
-      ThemeManager.updateButtonColors(btnChat, ThemeManager.NEON_CYAN, ThemeManager.DARK_BG);
-      ThemeManager.updateButtonColors(btnVideo, ThemeManager.NEON_PINK, Color.WHITE);
+      leftPanel.setBackground(ThemeManager.DARK_BG);
     } else {
       // 라이트모드 적용
       getContentPane().setBackground(ThemeManager.LIGHT_BG);
@@ -310,12 +309,8 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
-      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
       
-      ThemeManager.updateButtonColors(logout, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
-      ThemeManager.updateButtonColors(btnOpen, ThemeManager.LIGHT_BG, ThemeManager.TEXT_DARK);
-      ThemeManager.updateButtonColors(btnChat, ThemeManager.LIGHT_CYAN, Color.WHITE);
-      ThemeManager.updateButtonColors(btnVideo, ThemeManager.LIGHT_PINK, Color.WHITE);
+      leftPanel.setBackground(ThemeManager.LIGHT_BG);
     }
     
     // 스크롤바 스타일도 적용

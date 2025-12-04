@@ -2,6 +2,7 @@ package com.swingauth.ui;
 
 import com.swingauth.config.ServerConfig;
 import com.swingauth.model.User;
+import com.swingauth.util.NetworkDiscovery;
 import io.socket.client.IO;
 import io.socket.client.Socket;
 
@@ -84,7 +85,7 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
             }
         });
 
-        // Socket.io 연결
+        // Socket.io 연결 (네트워크 자동 발견 포함)
         connectSocket();
         
         // ThemeManager에 리스너 등록
@@ -142,6 +143,68 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
     }
 
     private void connectSocket() {
+        // 먼저 네트워크에서 서버를 자동으로 찾기 시도 (백그라운드 스레드)
+        String currentServerHost = ServerConfig.getServerHost();
+        // localhost나 이미 설정된 IP가 없으면 네트워크에서 찾기
+        if (currentServerHost == null || currentServerHost.equals("localhost") || currentServerHost.isEmpty()) {
+            SwingUtilities.invokeLater(() -> {
+                statusLabel.setText("네트워크에서 서버를 찾는 중...");
+            });
+            
+            // 백그라운드 스레드에서 서버 찾기
+            Thread discoveryThread = new Thread(() -> {
+                System.out.println("네트워크에서 서버를 자동으로 찾는 중...");
+                String discoveredServerIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기 (더 길게)
+                
+                SwingUtilities.invokeLater(() -> {
+                    if (discoveredServerIP != null && !discoveredServerIP.isEmpty()) {
+                        System.out.println("서버를 자동으로 발견했습니다: " + discoveredServerIP);
+                        ServerConfig.setServerHost(discoveredServerIP);
+                        statusLabel.setText("서버 발견: " + discoveredServerIP + " (연결 중...)");
+                    } else {
+                        System.out.println("❌ 네트워크에서 서버를 찾을 수 없습니다.");
+                        System.out.println("   - 같은 네트워크에 서버가 실행 중인지 확인하세요");
+                        System.out.println("   - 서버 컴퓨터에서 프로그램을 먼저 실행하세요");
+                        statusLabel.setText("서버를 찾을 수 없습니다. 잠시 후 다시 시도...");
+                        
+                        // 3초 후 다시 서버 찾기 시도
+                        Thread retryThread = new Thread(() -> {
+                            try {
+                                Thread.sleep(3000);
+                                System.out.println("서버 찾기 재시도 중...");
+                                String retryIP = NetworkDiscovery.discoverServer(10000);
+                                SwingUtilities.invokeLater(() -> {
+                                    if (retryIP != null && !retryIP.isEmpty()) {
+                                        ServerConfig.setServerHost(retryIP);
+                                        statusLabel.setText("서버 발견: " + retryIP + " (연결 중...)");
+                                        tryConnectSocket();
+                                    } else {
+                                        statusLabel.setText("서버를 찾을 수 없습니다. 연결 실패 시 수동 설정 가능합니다.");
+                                        // 연결 시도 (실패하면 IP 입력 다이얼로그 표시)
+                                        tryConnectSocket();
+                                    }
+                                });
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                        retryThread.setDaemon(true);
+                        retryThread.start();
+                        return; // 재시도할 때까지 연결하지 않음
+                    }
+                    // 서버 찾기 완료 후 실제 연결 시도
+                    tryConnectSocket();
+                });
+            });
+            discoveryThread.setDaemon(true);
+            discoveryThread.start();
+        } else {
+            // 이미 서버 IP가 설정되어 있으면 바로 연결
+            tryConnectSocket();
+        }
+    }
+    
+    private void tryConnectSocket() {
         try {
             IO.Options options = IO.Options.builder()
                     .setTransports(new String[]{"websocket", "polling"}) // polling도 허용
@@ -188,8 +251,44 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
                     String statusMsg = "서버 연결 실패: " + errorMsg;
                     if (errorMsg.contains("Connection refused") || errorMsg.contains("connect")) {
                         statusMsg += "\n서버가 실행 중인지 확인하세요.";
+                        
+                        // 연결 실패 시 네트워크에서 서버를 자동으로 찾기 시도
+                        statusLabel.setText("네트워크에서 서버를 찾는 중...");
+                        
+                        // 백그라운드 스레드에서 서버 찾기 시도
+                        Thread discoveryThread = new Thread(() -> {
+                            System.out.println("연결 실패 후 네트워크에서 서버를 자동으로 찾는 중...");
+                            String discoveredServerIP = NetworkDiscovery.discoverServer(10000); // 10초 동안 찾기 (더 길게)
+                            
+                            SwingUtilities.invokeLater(() -> {
+                                if (discoveredServerIP != null && !discoveredServerIP.isEmpty()) {
+                                    System.out.println("서버를 자동으로 발견했습니다: " + discoveredServerIP);
+                                    ServerConfig.setServerHost(discoveredServerIP);
+                                    statusLabel.setText("서버 발견: " + discoveredServerIP + " (재연결 중...)");
+                                    
+                                    // 자동으로 재연결 시도
+                                    try {
+                                        if (socket != null && socket.connected()) {
+                                            socket.disconnect();
+                                        }
+                                        Thread.sleep(500);
+                                        connectSocket();
+                                    } catch (Exception e) {
+                                        System.err.println("자동 재연결 실패: " + e.getMessage());
+                                        e.printStackTrace();
+                                        showServerIPDialog();
+                                    }
+                                } else {
+                                    // 서버를 찾지 못한 경우 사용자에게 IP 입력 다이얼로그 표시
+                                    showServerIPDialog();
+                                }
+                            });
+                        });
+                        discoveryThread.setDaemon(true);
+                        discoveryThread.start();
+                    } else {
+                        statusLabel.setText(statusMsg);
                     }
-                    statusLabel.setText(statusMsg);
                 });
             });
 
@@ -287,6 +386,37 @@ public class MatchingFrame extends JFrame implements ThemeManager.ThemeChangeLis
     
     public String getPartnerUsername() {
         return partnerUsername;
+    }
+    
+    /**
+     * 서버 IP 입력 다이얼로그를 표시하고 재연결을 시도하는 헬퍼 메서드
+     */
+    private void showServerIPDialog() {
+        int option = JOptionPane.showConfirmDialog(
+            MatchingFrame.this,
+            "서버에 연결할 수 없습니다.\n\n" +
+            "현재 시도한 주소: " + ServerConfig.getServerURL() + "\n\n" +
+            "서버 IP 주소를 변경하시겠습니까?",
+            "서버 연결 실패",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.ERROR_MESSAGE
+        );
+        
+        if (option == JOptionPane.YES_OPTION) {
+            // 서버 IP 입력 다이얼로그 표시
+            if (ServerIPDialog.showDialog(MatchingFrame.this)) {
+                // 새로운 서버 주소로 재연결 시도
+                try {
+                    if (socket != null && socket.connected()) {
+                        socket.disconnect();
+                    }
+                    connectSocket();
+                } catch (Exception e) {
+                    System.err.println("재연결 실패: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
     }
     
     private void closeWindow() {
