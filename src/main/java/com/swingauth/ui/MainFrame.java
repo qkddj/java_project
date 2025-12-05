@@ -1,6 +1,8 @@
 package com.swingauth.ui;
 
 import com.swingauth.model.User;
+import com.swingauth.service.SafetyAlertService;
+import com.swingauth.service.SafetyAlertService.Alert;
 import io.socket.client.Socket;
 
 import javax.swing.*;
@@ -8,12 +10,21 @@ import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
+/**
+ * 메인 화면
+ * - 게시판 선택/열기
+ * - 랜덤 채팅 / 랜덤 영상통화
+ * - 테마 전환
+ * - 내 지역 기준 안전알림(재난문자/실종경보 등) 조회
+ */
 public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListener {
 
   private final ThemeManager themeManager = ThemeManager.getInstance();
   private final User user;
-  
+  private final SafetyAlertService safetyAlertService = new SafetyAlertService();
+
   // 테마 적용을 위한 컴포넌트 참조
   private JPanel top;
   private JPanel right;
@@ -29,7 +40,9 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
   private JButton btnChat;
   private JButton btnVideo;
   private JButton themeToggleBtn;
+  private JButton btnSafety;        // ★ 안전알림 버튼
   private JPanel leftPanel;
+
   private final String[] boards = {
       "자유 게시판",
       "동네 소식 게시판",
@@ -48,23 +61,30 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     setLocationRelativeTo(null);
     setLayout(new BorderLayout());
 
-    // ===== 상단: 테마 전환 버튼 + 아이디(지역) + 로그아웃 =====
+    // ===== 상단: 테마 전환 버튼 + 안전알림 + 아이디(지역) + 로그아웃 =====
     top = new JPanel(new BorderLayout());
     top.setBorder(BorderFactory.createEmptyBorder(10, 12, 0, 12));
 
-    // 좌측 상단: 테마 전환 버튼
+    // 좌측 상단: 테마 전환 버튼 + 안전알림
     leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+
     themeToggleBtn = new JButton("🌙 다크모드");
     themeToggleBtn.setFont(themeToggleBtn.getFont().deriveFont(Font.BOLD, 12f));
     themeToggleBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     themeToggleBtn.setFocusPainted(false);
     ThemeManager.disableButtonPressedEffect(themeToggleBtn);
-    themeToggleBtn.addActionListener(e -> {
-      themeManager.toggleTheme();
-    });
-    
+    themeToggleBtn.addActionListener(e -> themeManager.toggleTheme());
     leftPanel.add(themeToggleBtn);
-    
+
+    // ★ 안전알림 버튼 (내 지역 재난/실종 경보 등 최대 30건 조회)
+    btnSafety = new JButton("안전알림");
+    btnSafety.setFont(btnSafety.getFont().deriveFont(Font.BOLD, 12f));
+    btnSafety.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    btnSafety.setFocusPainted(false);
+    ThemeManager.disableButtonPressedEffect(btnSafety);
+    btnSafety.addActionListener(e -> openSafetyDialog());
+    leftPanel.add(btnSafety);
+
     // ThemeManager에 리스너 등록
     themeManager.addThemeChangeListener(this);
 
@@ -105,14 +125,16 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
 
     // 엔터/더블클릭으로 열기
     list.addMouseListener(new MouseAdapter() {
-      @Override public void mouseClicked(MouseEvent e) {
+      @Override
+      public void mouseClicked(MouseEvent e) {
         if (e.getClickCount() == 2 && list.getSelectedIndex() >= 0) {
           openSelectedBoard(list.getSelectedValue());
         }
       }
     });
     list.addKeyListener(new java.awt.event.KeyAdapter() {
-      @Override public void keyPressed(java.awt.event.KeyEvent e) {
+      @Override
+      public void keyPressed(java.awt.event.KeyEvent e) {
         if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER && list.getSelectedIndex() >= 0) {
           openSelectedBoard(list.getSelectedValue());
         }
@@ -153,7 +175,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     btnChat.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
     btnChat.setFocusPainted(false);
     ThemeManager.disableButtonPressedEffect(btnChat);
-    
+
     btnVideo.setBackground(ThemeManager.NEON_PINK);
     btnVideo.setForeground(Color.WHITE);
     btnVideo.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
@@ -161,39 +183,38 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     ThemeManager.disableButtonPressedEffect(btnVideo);
 
     btnChat.addActionListener(e -> {
-        MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
-        matchingFrameRef[0] = new MatchingFrame(user, () -> {
-            // 매칭 완료 시 채팅 화면 열기 (소켓 전달)
-            SwingUtilities.invokeLater(() -> {
-                Socket socket = matchingFrameRef[0].getSocket();
-                String partnerUsername = matchingFrameRef[0].getPartnerUsername();
-                new RandomChatFrame(socket, user, partnerUsername).setVisible(true);
-            });
+      MatchingFrame[] matchingFrameRef = new MatchingFrame[1];
+      matchingFrameRef[0] = new MatchingFrame(user, () -> {
+        // 매칭 완료 시 채팅 화면 열기 (소켓 전달)
+        SwingUtilities.invokeLater(() -> {
+          Socket socket = matchingFrameRef[0].getSocket();
+          String partnerUsername = matchingFrameRef[0].getPartnerUsername();
+          new RandomChatFrame(socket, user, partnerUsername).setVisible(true);
         });
-        matchingFrameRef[0].setVisible(true);
+      });
+      matchingFrameRef[0].setVisible(true);
     });
+
     btnVideo.addActionListener(e -> {
-        System.out.println("[MainFrame] 랜덤 영상 통화 버튼 클릭됨");
-        System.out.println("[MainFrame] user: " + (user != null ? user.username : "null"));
-        System.out.println("[MainFrame] isDarkMode: " + themeManager.isDarkMode());
-        
-        // UI 스레드에서 직접 실행 (비동기 스레드 문제 해결)
-        try {
-            System.out.println("[MainFrame] VideoCallFrame 생성 시작...");
-            System.out.println("[MainFrame] VideoCallFrame 생성 완료");
-        } catch (Exception ex) {
-            System.err.println("[MainFrame] VideoCallFrame 생성 실패: " + ex.getMessage());
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, 
-                "영상통화를 시작할 수 없습니다: " + ex.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.", 
-                "오류", JOptionPane.ERROR_MESSAGE);
-        } catch (Throwable t) {
-            System.err.println("[MainFrame] VideoCallFrame 생성 중 예상치 못한 오류: " + t.getMessage());
-            t.printStackTrace();
-            JOptionPane.showMessageDialog(this, 
-                "영상통화를 시작할 수 없습니다: " + t.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.", 
-                "오류", JOptionPane.ERROR_MESSAGE);
-        }
+      System.out.println("[MainFrame] 랜덤 영상 통화 버튼 클릭됨");
+      System.out.println("[MainFrame] user: " + (user != null ? user.username : "null"));
+      System.out.println("[MainFrame] isDarkMode: " + themeManager.isDarkMode());
+      try {
+        System.out.println("[MainFrame] VideoCallFrame 생성 시작...");
+        System.out.println("[MainFrame] VideoCallFrame 생성 완료");
+      } catch (Exception ex) {
+        System.err.println("[MainFrame] VideoCallFrame 생성 실패: " + ex.getMessage());
+        ex.printStackTrace();
+        JOptionPane.showMessageDialog(this,
+            "영상통화를 시작할 수 없습니다: " + ex.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.",
+            "오류", JOptionPane.ERROR_MESSAGE);
+      } catch (Throwable t) {
+        System.err.println("[MainFrame] VideoCallFrame 생성 중 예상치 못한 오류: " + t.getMessage());
+        t.printStackTrace();
+        JOptionPane.showMessageDialog(this,
+            "영상통화를 시작할 수 없습니다: " + t.getMessage() + "\n\n자세한 내용은 콘솔을 확인하세요.",
+            "오류", JOptionPane.ERROR_MESSAGE);
+      }
     });
 
     bottom.add(btnChat);
@@ -204,25 +225,138 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     applyTheme();
   }
 
+  /* ===================== 게시판 열기 ===================== */
+
   private void openSelectedBoard(String boardName) {
-    // 새 창(프레임)으로 해당 게시판 열기
     SwingUtilities.invokeLater(() -> new BoardFrame(user, boardName).setVisible(true));
   }
+
+  /* ===================== 안전알림 다이얼로그 ===================== */
+
+  /**
+   * User.region / User.city 기반으로 내 지역 안전알림
+   * (재난문자 + 실종경보 등) 최대 30건을 조회하여 보여준다.
+   *
+   * 실제 SafetyAlertService 내부에서 공공데이터 API를 호출한다.
+   */
+  private void openSafetyDialog() {
+    JDialog dialog = new JDialog(this, "안전알림", true);
+    dialog.setSize(700, 450);
+    dialog.setLocationRelativeTo(this);
+    dialog.setLayout(new BorderLayout(8, 8));
+
+    // Alert 객체를 직접 담는 리스트
+    DefaultListModel<Alert> model = new DefaultListModel<>();
+    JList<Alert> alertList = new JList<>(model);
+    alertList.setVisibleRowCount(12);
+    alertList.setFixedCellHeight(22);
+
+    JScrollPane scrollPane = new JScrollPane(alertList);
+    dialog.add(scrollPane, BorderLayout.CENTER);
+
+    JLabel info = new JLabel("전국 안전알림(최신 20건)을 불러오는 중...");
+    info.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    dialog.add(info, BorderLayout.SOUTH);
+
+    // 더블클릭 시 상세 정보 다이얼로그
+    alertList.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        if (e.getClickCount() == 2 && alertList.getSelectedIndex() >= 0) {
+          Alert a = alertList.getSelectedValue();
+          if (a != null) {
+            showAlertDetailDialog(a, dialog);
+          }
+        }
+      }
+    });
+
+    new SwingWorker<List<Alert>, Void>() {
+      @Override
+      protected List<Alert> doInBackground() {
+        try {
+          // ✅ 이제는 지역 상관없이 전국 기준 최신 20건 조회
+          return safetyAlertService.fetchLatestAlerts(20);
+        } catch (Exception ex) {
+          ex.printStackTrace();
+          SwingUtilities.invokeLater(() ->
+              info.setText("오류: " + ex.getMessage())
+          );
+          return java.util.Collections.emptyList();
+        }
+      }
+
+      @Override
+      protected void done() {
+        try {
+          List<Alert> alerts = get();
+          model.clear();
+          if (alerts.isEmpty()) {
+            info.setText("표시할 안전알림이 없습니다. (전국 기준)");
+          } else {
+            for (Alert a : alerts) {
+              model.addElement(a);
+            }
+            info.setText("총 " + alerts.size() + "건 – 전국 기준 최신 알림 (더블클릭 시 상세보기)");
+          }
+        } catch (Exception ex) {
+          info.setText("결과 처리 중 오류: " + ex.getMessage());
+        }
+      }
+    }.execute();
+
+    dialog.setVisible(true);
+  }
+
+  /**
+   * 실종경보/재난문자 상세 내용을 보여주는 팝업.
+   */
+  private void showAlertDetailDialog(Alert a, Component parent) {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append("종류: ").append(a.type).append("\n");
+    sb.append("지역: ").append(a.region).append("\n");
+    if (a.timeText != null) {
+      sb.append("발생일자: ").append(a.timeText).append("\n");
+    }
+    sb.append("\n");
+
+    // Amber Alert(실종경보)일 경우 상세 정보
+    if ("실종경보".equals(a.type)) {
+      if (a.name != null) sb.append("이름: ").append(a.name).append("\n");
+      if (a.ageNow != null) sb.append("현재 나이: ").append(a.ageNow).append("세\n");
+      if (a.sex != null) sb.append("성별(코드): ").append(a.sex).append("\n");
+      if (a.detailAddress != null) sb.append("발생 장소: ").append(a.detailAddress).append("\n");
+      if (a.feature != null) {
+        sb.append("\n옷차림/특징:\n").append(a.feature).append("\n");
+      }
+    }
+
+    sb.append("\n요약 메시지:\n").append(a.message != null ? a.message : "(없음)");
+
+    JOptionPane.showMessageDialog(parent,
+        sb.toString(),
+        "상세 정보",
+        JOptionPane.INFORMATION_MESSAGE);
+  }
+
+
+  /* ===================== 테마 변경 ===================== */
 
   @Override
   public void onThemeChanged() {
     applyTheme();
   }
-  
+
   private void applyTheme() {
     boolean isDarkMode = themeManager.isDarkMode();
-    
-    // JOptionPane 배경색 설정
+
     UIManager.put("OptionPane.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     UIManager.put("Panel.background", isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
     UIManager.put("OptionPane.messageForeground", isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+
     if (isDarkMode) {
-      // 다크모드 적용
+      // 다크모드
       getContentPane().setBackground(ThemeManager.DARK_BG);
       top.setBackground(ThemeManager.DARK_BG);
       right.setBackground(ThemeManager.DARK_BG);
@@ -230,44 +364,48 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       logout.setBackground(ThemeManager.DARK_BG2);
       logout.setForeground(ThemeManager.TEXT_LIGHT);
       logout.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
-      
+
       centerWrap.setBackground(ThemeManager.DARK_BG);
       centerWrap.setOpaque(true);
       boardBox.setBorder(new LineBorder(ThemeManager.NEON_CYAN, 2, true));
       boardBox.setBackground(ThemeManager.DARK_BG2);
       boardBox.setOpaque(true);
-      
+
       list.setBackground(ThemeManager.DARK_BG2);
       list.setForeground(ThemeManager.TEXT_LIGHT);
       list.setSelectionBackground(ThemeManager.NEON_CYAN);
       list.setSelectionForeground(ThemeManager.DARK_BG);
-      
+
       scroll.setBackground(ThemeManager.DARK_BG2);
       scroll.getViewport().setBackground(ThemeManager.DARK_BG2);
       scroll.setBorder(BorderFactory.createEmptyBorder());
       scroll.setOpaque(true);
-      
+
       openBar.setBackground(ThemeManager.DARK_BG2);
       openBar.setOpaque(true);
       btnOpen.setBackground(ThemeManager.DARK_BG);
       btnOpen.setForeground(ThemeManager.TEXT_LIGHT);
       btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
-      
+
       bottom.setBackground(ThemeManager.DARK_BG);
       bottom.setOpaque(true);
       btnChat.setBackground(ThemeManager.NEON_CYAN);
       btnChat.setForeground(ThemeManager.DARK_BG);
       btnVideo.setBackground(ThemeManager.NEON_PINK);
       btnVideo.setForeground(Color.WHITE);
-      
+
       themeToggleBtn.setText("🌙 다크모드");
       themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
-      
+
+      btnSafety.setBackground(ThemeManager.DARK_BG2);
+      btnSafety.setForeground(ThemeManager.TEXT_LIGHT);
+      btnSafety.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
+
       leftPanel.setBackground(ThemeManager.DARK_BG);
     } else {
-      // 라이트모드 적용
+      // 라이트모드
       getContentPane().setBackground(ThemeManager.LIGHT_BG);
       top.setBackground(ThemeManager.LIGHT_BG);
       right.setBackground(ThemeManager.LIGHT_BG);
@@ -275,45 +413,48 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       logout.setBackground(ThemeManager.LIGHT_BG2);
       logout.setForeground(ThemeManager.TEXT_DARK);
       logout.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
-      
+
       centerWrap.setBackground(ThemeManager.LIGHT_BG);
       centerWrap.setOpaque(true);
       boardBox.setBorder(new LineBorder(ThemeManager.LIGHT_CYAN, 2, true));
       boardBox.setBackground(ThemeManager.LIGHT_BG2);
       boardBox.setOpaque(true);
-      
+
       list.setBackground(ThemeManager.LIGHT_BG2);
       list.setForeground(ThemeManager.TEXT_DARK);
       list.setSelectionBackground(ThemeManager.LIGHT_CYAN);
       list.setSelectionForeground(Color.WHITE);
-      
+
       scroll.setBackground(ThemeManager.LIGHT_BG2);
       scroll.getViewport().setBackground(ThemeManager.LIGHT_BG2);
       scroll.setBorder(BorderFactory.createEmptyBorder());
       scroll.setOpaque(true);
-      
+
       openBar.setBackground(ThemeManager.LIGHT_BG2);
       openBar.setOpaque(true);
       btnOpen.setBackground(ThemeManager.LIGHT_BG);
       btnOpen.setForeground(ThemeManager.TEXT_DARK);
       btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
-      
+
       bottom.setBackground(ThemeManager.LIGHT_BG);
       bottom.setOpaque(true);
       btnChat.setBackground(ThemeManager.LIGHT_CYAN);
       btnChat.setForeground(Color.WHITE);
       btnVideo.setBackground(ThemeManager.LIGHT_PINK);
       btnVideo.setForeground(Color.WHITE);
-      
+
       themeToggleBtn.setText("☀️ 라이트모드");
       themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
       themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
-      
+
+      btnSafety.setBackground(ThemeManager.LIGHT_BG2);
+      btnSafety.setForeground(ThemeManager.TEXT_DARK);
+      btnSafety.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
+
       leftPanel.setBackground(ThemeManager.LIGHT_BG);
     }
-    
-    // 스크롤바 스타일도 적용
+
     UIManager.put("ScrollBar.background", isDarkMode ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2);
     UIManager.put("ScrollBar.thumb", isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER);
     SwingUtilities.updateComponentTreeUI(this);

@@ -51,6 +51,11 @@ public class Mongo {
     return getDb().getCollection("reports");
   }
 
+  // ★ 안전알림 캐시용 컬렉션
+  public static MongoCollection<Document> alerts() {
+    return getDb().getCollection("alerts");
+  }
+
   // 기존에 쓰던 평점용 컬렉션 (그대로 유지)
   public static MongoCollection<Document> ratings() {
     return getDb().getCollection("ratings");
@@ -118,6 +123,20 @@ public class Mongo {
     // 최신 신고 순 정렬용
     safeCreateIndex(reports(), Indexes.descending("createdAt"));
 
+    // ★ alerts: 지역별 안전알림 캐시
+    // regionKey + createdAt 내림차순 정렬용
+    safeCreateIndex(
+        alerts(),
+        Indexes.descending("regionKey", "createdAt"),
+        new IndexOptions().name("idx_alerts_region_createdAt")
+    );
+    // regionKey + fetchedAt 내림차순 (캐시 최신 시각 확인용)
+    safeCreateIndex(
+        alerts(),
+        Indexes.descending("regionKey", "fetchedAt"),
+        new IndexOptions().name("idx_alerts_region_fetchedAt")
+    );
+
     // ratings: 평점 인덱스 (원래 있던 거 유지)
     // 기존에 있던 잘못된 인덱스 삭제 시도
     try {
@@ -129,7 +148,7 @@ public class Mongo {
       ratings().dropIndex("uniq_user_pair_service");
       System.out.println("[Mongo] 기존 uniq_user_pair_service 인덱스 삭제 완료");
     } catch (Exception ignored) {}
-    
+
     try {
       ratings().dropIndex("uniq_user_service_average");
       System.out.println("[Mongo] 기존 uniq_user_service_average 인덱스 삭제 완료");
