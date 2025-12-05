@@ -295,14 +295,19 @@ public class NetworkDiscovery {
                         String ip = ipPort[0];
                         int port = Integer.parseInt(ipPort[1]);
                         String ngrokUrl = parts.length > 1 ? parts[1] : null;
-                        
-                        // 자신의 서버가 아닌 경우 즉시 반환
-                        if (!ip.equals(localIP) && !ip.equals("localhost") && !responderIP.equals(localIP)) {
-                            System.out.println("✅ 다른 영상통화 서버 발견: " + ip + ":" + port + 
-                                (ngrokUrl != null ? " (ngrok: " + ngrokUrl + ")" : ""));
+
+                        // ngrok URL이 있으면 내 서버라도 우선 사용 (서버/클라이언트 모두 버튼 눌러도 동일 링크 사용)
+                        if (ngrokUrl != null && !ngrokUrl.isEmpty()) {
+                            System.out.println("✅ ngrok 영상통화 서버 발견: " + ngrokUrl + " (origin: " + ip + ":" + port + ")");
                             return new VideoServerInfo(ip, port, ngrokUrl);
+                        }
+
+                        // ngrok이 없으면 기존 로직으로 다른 서버만 선택
+                        if (!ip.equals(localIP) && !ip.equals("localhost") && !responderIP.equals(localIP)) {
+                            System.out.println("✅ 다른 영상통화 서버 발견: " + ip + ":" + port);
+                            return new VideoServerInfo(ip, port, null);
                         } else {
-                            System.out.println("⚠️  자신의 서버입니다: " + ip + ":" + port + " (계속 찾는 중...)");
+                            System.out.println("⚠️  자신의 서버입니다(ngrok 없음): " + ip + ":" + port + " (계속 찾는 중...)");
                         }
                     }
                 } catch (SocketTimeoutException e) {
