@@ -201,6 +201,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       System.out.println("[MainFrame] isDarkMode: " + themeManager.isDarkMode());
       try {
         System.out.println("[MainFrame] VideoCallFrame 생성 시작...");
+        new VideoCallFrame(user, themeManager.isDarkMode());
         System.out.println("[MainFrame] VideoCallFrame 생성 완료");
       } catch (Exception ex) {
         System.err.println("[MainFrame] VideoCallFrame 생성 실패: " + ex.getMessage());
@@ -244,18 +245,35 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
     dialog.setSize(700, 450);
     dialog.setLocationRelativeTo(this);
     dialog.setLayout(new BorderLayout(8, 8));
+    boolean isDark = themeManager.isDarkMode();
+    Color bg = isDark ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG;
+    Color bg2 = isDark ? ThemeManager.DARK_BG2 : ThemeManager.LIGHT_BG2;
+    Color fg = isDark ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
+    Color borderColor = isDark ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
+    Color accent = isDark ? ThemeManager.NEON_CYAN : ThemeManager.LIGHT_CYAN;
+    dialog.getContentPane().setBackground(bg);
 
     // Alert 객체를 직접 담는 리스트
     DefaultListModel<Alert> model = new DefaultListModel<>();
     JList<Alert> alertList = new JList<>(model);
     alertList.setVisibleRowCount(12);
     alertList.setFixedCellHeight(22);
+    alertList.setBackground(bg2);
+    alertList.setForeground(fg);
+    alertList.setSelectionBackground(accent);
+    alertList.setSelectionForeground(isDark ? ThemeManager.DARK_BG : Color.WHITE);
 
     JScrollPane scrollPane = new JScrollPane(alertList);
+    scrollPane.getViewport().setBackground(bg2);
+    scrollPane.setBackground(bg2);
+    scrollPane.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     dialog.add(scrollPane, BorderLayout.CENTER);
 
     JLabel info = new JLabel("전국 안전알림(최신 20건)을 불러오는 중...");
     info.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    info.setForeground(fg);
+    info.setBackground(bg);
+    info.setOpaque(true);
     dialog.add(info, BorderLayout.SOUTH);
 
     // 더블클릭 시 상세 정보 다이얼로그
@@ -361,8 +379,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       top.setBackground(ThemeManager.DARK_BG);
       right.setBackground(ThemeManager.DARK_BG);
       idAndLoc.setForeground(ThemeManager.TEXT_LIGHT);
-      logout.setBackground(ThemeManager.DARK_BG2);
-      logout.setForeground(ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(logout, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
       logout.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
 
       centerWrap.setBackground(ThemeManager.DARK_BG);
@@ -383,24 +400,19 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
 
       openBar.setBackground(ThemeManager.DARK_BG2);
       openBar.setOpaque(true);
-      btnOpen.setBackground(ThemeManager.DARK_BG);
-      btnOpen.setForeground(ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(btnOpen, ThemeManager.DARK_BG, ThemeManager.TEXT_LIGHT);
       btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
 
       bottom.setBackground(ThemeManager.DARK_BG);
       bottom.setOpaque(true);
-      btnChat.setBackground(ThemeManager.NEON_CYAN);
-      btnChat.setForeground(ThemeManager.DARK_BG);
-      btnVideo.setBackground(ThemeManager.NEON_PINK);
-      btnVideo.setForeground(Color.WHITE);
+      ThemeManager.updateButtonColors(btnChat, ThemeManager.NEON_CYAN, ThemeManager.DARK_BG);
+      ThemeManager.updateButtonColors(btnVideo, ThemeManager.NEON_PINK, Color.WHITE);
 
       themeToggleBtn.setText("🌙 다크모드");
-      themeToggleBtn.setBackground(ThemeManager.DARK_BG2);
-      themeToggleBtn.setForeground(ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
 
-      btnSafety.setBackground(ThemeManager.DARK_BG2);
-      btnSafety.setForeground(ThemeManager.TEXT_LIGHT);
+      ThemeManager.updateButtonColors(btnSafety, ThemeManager.DARK_BG2, ThemeManager.TEXT_LIGHT);
       btnSafety.setBorder(BorderFactory.createLineBorder(ThemeManager.DARK_BORDER, 1));
 
       leftPanel.setBackground(ThemeManager.DARK_BG);
@@ -410,8 +422,7 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
       top.setBackground(ThemeManager.LIGHT_BG);
       right.setBackground(ThemeManager.LIGHT_BG);
       idAndLoc.setForeground(ThemeManager.TEXT_DARK);
-      logout.setBackground(ThemeManager.LIGHT_BG2);
-      logout.setForeground(ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(logout, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
       logout.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
 
       centerWrap.setBackground(ThemeManager.LIGHT_BG);
@@ -432,24 +443,19 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
 
       openBar.setBackground(ThemeManager.LIGHT_BG2);
       openBar.setOpaque(true);
-      btnOpen.setBackground(ThemeManager.LIGHT_BG);
-      btnOpen.setForeground(ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(btnOpen, ThemeManager.LIGHT_BG, ThemeManager.TEXT_DARK);
       btnOpen.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
 
       bottom.setBackground(ThemeManager.LIGHT_BG);
       bottom.setOpaque(true);
-      btnChat.setBackground(ThemeManager.LIGHT_CYAN);
-      btnChat.setForeground(Color.WHITE);
-      btnVideo.setBackground(ThemeManager.LIGHT_PINK);
-      btnVideo.setForeground(Color.WHITE);
+      ThemeManager.updateButtonColors(btnChat, ThemeManager.LIGHT_CYAN, Color.WHITE);
+      ThemeManager.updateButtonColors(btnVideo, ThemeManager.LIGHT_PINK, Color.WHITE);
 
       themeToggleBtn.setText("☀️ 라이트모드");
-      themeToggleBtn.setBackground(ThemeManager.LIGHT_BG2);
-      themeToggleBtn.setForeground(ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(themeToggleBtn, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
       themeToggleBtn.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
 
-      btnSafety.setBackground(ThemeManager.LIGHT_BG2);
-      btnSafety.setForeground(ThemeManager.TEXT_DARK);
+      ThemeManager.updateButtonColors(btnSafety, ThemeManager.LIGHT_BG2, ThemeManager.TEXT_DARK);
       btnSafety.setBorder(BorderFactory.createLineBorder(ThemeManager.LIGHT_BORDER, 1));
 
       leftPanel.setBackground(ThemeManager.LIGHT_BG);
