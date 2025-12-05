@@ -303,9 +303,33 @@ public class ServerLauncher {
                     System.err.println("포트를 가져오는 중 오류: " + e.getMessage());
                 }
             }
+            localIpAddress = findLocalIpAddress();
+            
+            // ngrok URL 확인
+            String ngrokUrl = null;
+            for (int i = 0; i < 5; i++) {
+                try {
+                    Thread.sleep(200);
+                    ngrokUrl = NgrokUtil.getNgrokHttpsUrl();
+                    if (ngrokUrl != null) {
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            
+            // 네트워크 브로드캐스트 및 리스너 시작 (ngrok URL 포함)
+            NetworkDiscovery.startVideoServerListener(localIpAddress, port, ngrokUrl);
+            NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, ngrokUrl);
+            
             System.out.println("========================================");
             System.out.println("서버가 이미 실행 중입니다. 포트: " + port);
             System.out.println("접속 URL: http://localhost:" + port + "/video-call.html");
+            if (ngrokUrl != null) {
+                System.out.println("HTTPS 접속 (ngrok): " + ngrokUrl + "/video-call.html");
+            }
             System.out.println("========================================");
             return;
         }
@@ -331,6 +355,25 @@ public class ServerLauncher {
                     // 다른 프로세스에서 서버가 실행 중이면 그 포트를 그대로 사용
                     port = savedPort;
                     localIpAddress = findLocalIpAddress();
+                    
+                    // ngrok URL 확인
+                    String ngrokUrl = null;
+                    for (int i = 0; i < 5; i++) {
+                        try {
+                            Thread.sleep(200);
+                            ngrokUrl = NgrokUtil.getNgrokHttpsUrl();
+                            if (ngrokUrl != null) {
+                                break;
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                    
+                    // 브로드캐스트 시작 (다른 프로세스의 서버이므로 리스너는 시작하지 않음 - 포트 충돌 방지)
+                    NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, ngrokUrl);
+                    
                     return; // 서버를 시작하지 않고 종료
                 }
                 
@@ -578,7 +621,8 @@ public class ServerLauncher {
             }
         }
         
-        // 네트워크 브로드캐스트 시작 (ngrok URL 포함)
+        // 네트워크 브로드캐스트 및 리스너 시작 (ngrok URL 포함)
+        NetworkDiscovery.startVideoServerListener(localIpAddress, port, ngrokUrl);
         NetworkDiscovery.startVideoServerBroadcast(localIpAddress, port, ngrokUrl);
         
         System.out.println("========================================");
