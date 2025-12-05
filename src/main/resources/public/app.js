@@ -273,8 +273,8 @@ ws.addEventListener('message', async (ev) => {
       showHangupButton(false);
       setStatus('Idle');
       
-      // 다음 매칭을 위해 partnerUsername 초기화
-      partnerUsername = null;
+      // 다음 매칭을 위해 partnerUsername 초기화는
+      // 평점 제출 이후에 이뤄져야 하므로 여기서는 건드리지 않는다.
       break;
     case 'ratingSubmitted':
       // 평가 저장 완료 메시지 표시

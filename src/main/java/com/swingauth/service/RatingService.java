@@ -63,8 +63,13 @@ public class RatingService {
         if (ratedUsername == null || ratedUsername.isBlank() || ratedUsername.equals("anonymous")) {
             throw new IllegalArgumentException("상대방 사용자 정보가 필요합니다. (현재 값: " + ratedUsername + ")");
         }
-        // rating이 0이면 건너뛰기를 의미 (0점으로 저장)
+        // rating이 0이면 건너뛰기를 의미 (DB에 저장하지 않음)
         // rating이 1-5 사이면 정상 평점
+        if (rating == 0) {
+            System.out.println("평점 건너뛰기 요청 - 저장하지 않습니다.");
+            return false;
+        }
+
         if (rating < 0 || rating > 5) {
             throw new IllegalArgumentException("평점은 0(건너뛰기) 또는 1-5 사이의 값이어야 합니다.");
         }
@@ -99,35 +104,25 @@ public class RatingService {
         // 기존 문서 확인
         Document existingDoc = ratings.find(filter).first();
         
+        double ratingValue = (double) rating;
+
         if (existingDoc == null) {
-            // 새 문서 생성: 첫 번째 평점이 평균이 됨
             Document newDoc = new Document()
                 .append("user1Id", user1Id)
                 .append("user2Id", user2Id)
                 .append("serviceType", "randomChat")
                 .append("createdAt", new Date())
                 .append("updatedAt", new Date())
-                .append("averageRating", (double) rating);
+                .append("averageRating", ratingValue);
             ratings.insertOne(newDoc);
         } else {
-            // 기존 문서 업데이트: 기존 평균과 새 평점의 평균 계산
-            double oldAverage = 5.0;
-            Object avgObj = existingDoc.get("averageRating");
-            if (avgObj instanceof Number) {
-                oldAverage = ((Number) avgObj).doubleValue();
-            }
-            double newAverage = Math.round(((oldAverage + rating) / 2.0) * 10.0) / 10.0;
-            
             Document update = new Document("$set", new Document()
                 .append("updatedAt", new Date())
-                .append("averageRating", newAverage));
+                .append("averageRating", ratingValue));
             ratings.updateOne(filter, update);
         }
         
-        // 평점을 받은 사용자의 통계 업데이트 (0점이 아닌 경우만)
-        if (rating > 0) {
-            updateUserRatingStats(ratedId, rating, "randomChat");
-        }
+        updateUserRatingStats(ratedId, rating, "randomChat");
         
         return true;
     }

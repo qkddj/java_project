@@ -539,10 +539,11 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
             RatingDialog ratingDialog = new RatingDialog(this);
             int rating = ratingDialog.showRatingDialog();
             
-            // rating이 0이면 건너뛰기, 1-5면 평점 저장
-            // rating >= 0이면 모두 처리 (0점도 저장)
-            if (rating >= 0) {
-                // 평점 저장 (0점 포함)
+            // rating이 0이면 건너뛰고, 1-5면 평점을 저장
+            if (rating == 0) {
+                System.out.println("평점 건너뛰기 선택 - DB에 저장하지 않습니다.");
+            } else if (rating > 0) {
+                // 평점 저장
                 try {
                     RatingService ratingService = new RatingService();
                     // partnerId는 Socket ID이거나 username일 수 있음
@@ -567,13 +568,10 @@ public class RandomChatFrame extends JFrame implements ThemeManager.ThemeChangeL
                     } else {
                         try {
                             ratingService.createRating(currentUser.username, ratedUsername, rating);
-                            if (rating > 0) {
-                                JOptionPane.showMessageDialog(this, 
-                                    "평점이 저장되었습니다. 감사합니다!", 
-                                    "평점 제출 완료", 
-                                    JOptionPane.INFORMATION_MESSAGE);
-                            }
-                            // rating이 0이면 건너뛰기이므로 메시지 표시하지 않음
+                            JOptionPane.showMessageDialog(this, 
+                                "평점이 저장되었습니다. 감사합니다!", 
+                                "평점 제출 완료", 
+                                JOptionPane.INFORMATION_MESSAGE);
                         } catch (IllegalArgumentException e) {
                             JOptionPane.showMessageDialog(this, 
                                 "평점 저장 실패: " + e.getMessage(), 
