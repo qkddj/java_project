@@ -487,6 +487,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     JButton btnLike = new JButton("좋아요");
     JButton btnDislike = new JButton("싫어요");
     JButton btnEdit = new JButton("수정");
+    JButton btnDelete = new JButton("삭제");   // ★ 삭제 버튼 추가
     JButton btnComment = new JButton("댓글 등록");
     JButton btnReport = new JButton("신고");
     JButton btnClose = new JButton("닫기");
@@ -502,6 +503,8 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     btnDislike.setForeground(btnFg);
     btnEdit.setBackground(btnBg);
     btnEdit.setForeground(btnFg);
+    btnDelete.setBackground(btnBg);
+    btnDelete.setForeground(btnFg);
     btnComment.setBackground(btnBg);
     btnComment.setForeground(btnFg);
     btnReport.setBackground(btnBg);
@@ -514,6 +517,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     btnLike.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     btnDislike.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     btnEdit.setBorder(BorderFactory.createLineBorder(borderColor, 1));
+    btnDelete.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     btnComment.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     btnReport.setBorder(BorderFactory.createLineBorder(borderColor, 1));
     btnClose.setBorder(BorderFactory.createLineBorder(borderColor, 1));
@@ -521,6 +525,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     btnLike.setFocusPainted(false);
     btnDislike.setFocusPainted(false);
     btnEdit.setFocusPainted(false);
+    btnDelete.setFocusPainted(false);
     btnComment.setFocusPainted(false);
     btnReport.setFocusPainted(false);
     btnClose.setFocusPainted(false);
@@ -528,6 +533,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     ThemeManager.disableButtonPressedEffect(btnLike);
     ThemeManager.disableButtonPressedEffect(btnDislike);
     ThemeManager.disableButtonPressedEffect(btnEdit);
+    ThemeManager.disableButtonPressedEffect(btnDelete);
     ThemeManager.disableButtonPressedEffect(btnComment);
     ThemeManager.disableButtonPressedEffect(btnReport);
     ThemeManager.disableButtonPressedEffect(btnClose);
@@ -536,12 +542,14 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     ThemeManager.updateButtonColors(btnLike, btnBg, btnFg);
     ThemeManager.updateButtonColors(btnDislike, btnBg, btnFg);
     ThemeManager.updateButtonColors(btnEdit, btnBg, btnFg);
+    ThemeManager.updateButtonColors(btnDelete, btnBg, btnFg);
     ThemeManager.updateButtonColors(btnComment, btnBg, btnFg);
     ThemeManager.updateButtonColors(btnReport, btnBg, btnFg);
     ThemeManager.updateButtonColors(btnClose, btnBg, btnFg);
 
     if (!isOwner) {
       btnEdit.setEnabled(false);
+      btnDelete.setEnabled(false);
     }
 
     // 이미 신고했는지 미리 체크해서 버튼 상태 변경
@@ -617,6 +625,48 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         dialog.setTitle(p.title);
       }
       resetAndLoad();
+    });
+
+    // ★ 삭제 버튼 액션
+    btnDelete.addActionListener(e -> {
+      if (!isOwner) return;
+
+      int confirm = JOptionPane.showConfirmDialog(
+          dialog,
+          "정말 이 게시글을 삭제하시겠습니까?",
+          "게시글 삭제 확인",
+          JOptionPane.YES_NO_OPTION,
+          JOptionPane.WARNING_MESSAGE
+      );
+      if (confirm != JOptionPane.YES_OPTION) return;
+
+      setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+      new SwingWorker<Void, Void>() {
+        @Override
+        protected Void doInBackground() {
+          postService.delete(p, user);
+          return null;
+        }
+
+        @Override
+        protected void done() {
+          setCursor(Cursor.getDefaultCursor());
+          try {
+            get(); // 예외 전파
+            JOptionPane.showMessageDialog(dialog,
+                "게시글이 삭제되었습니다.",
+                "알림", JOptionPane.INFORMATION_MESSAGE);
+            dialog.dispose();
+            resetAndLoad(); // 목록 갱신
+          } catch (Exception ex) {
+            Throwable cause = ex.getCause();
+            String msg = (cause != null ? cause.getMessage() : ex.getMessage());
+            JOptionPane.showMessageDialog(dialog,
+                "삭제 실패: " + msg,
+                "오류", JOptionPane.ERROR_MESSAGE);
+          }
+        }
+      }.execute();
     });
 
     btnComment.addActionListener(e -> {
@@ -806,6 +856,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
     bottomPanel.add(btnLike);
     bottomPanel.add(btnDislike);
     bottomPanel.add(btnEdit);
+    bottomPanel.add(btnDelete);   // ★ 하단에 삭제 버튼 추가
     bottomPanel.add(btnComment);
     bottomPanel.add(btnReport);
     bottomPanel.add(btnClose);
@@ -871,6 +922,12 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       btnEdit.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
       btnEdit.setFocusPainted(false);
       ThemeManager.updateButtonColors(btnEdit, detailBtnBg, detailBtnFg);
+
+      btnDelete.setBackground(detailBtnBg);
+      btnDelete.setForeground(detailBtnFg);
+      btnDelete.setBorder(BorderFactory.createLineBorder(detailBtnBorder, 1));
+      btnDelete.setFocusPainted(false);
+      ThemeManager.updateButtonColors(btnDelete, detailBtnBg, detailBtnFg);
       
       btnComment.setBackground(detailBtnBg);
       btnComment.setForeground(detailBtnFg);

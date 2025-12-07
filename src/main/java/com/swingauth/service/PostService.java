@@ -211,6 +211,42 @@ public class PostService {
     return nowDisliked;
   }
 
+  /** 게시글 삭제
+   *  - 본인 글인지 확인
+   *  - posts 에서 게시글 삭제
+   *  - comments 에서 해당 글의 댓글만 삭제
+   *  - likes / dislikes / reports 는 삭제하지 않음 (이력/블랙리스트용)
+   */
+  public void delete(Post p, User currentUser) {
+    if (p == null || p.id == null) {
+      throw new IllegalArgumentException("삭제할 게시글 정보가 없습니다.");
+    }
+
+    ObjectId oid = new ObjectId(p.id);
+
+    // 게시글 다시 조회해서 작성자 검증
+    Document postDoc = posts.find(Filters.eq("_id", oid)).first();
+    if (postDoc == null) {
+      throw new IllegalArgumentException("게시글을 찾을 수 없습니다.");
+    }
+
+    String author = postDoc.getString("authorUsername");
+    if (author == null || !author.equals(currentUser.username)) {
+      throw new IllegalStateException("본인이 작성한 글만 삭제할 수 있습니다.");
+    }
+
+    // 1) 게시글 삭제
+    posts.deleteOne(Filters.eq("_id", oid));
+
+    // 2) 댓글만 삭제
+    Mongo.comments().deleteMany(Filters.eq("postId", p.id));
+
+    // 3) likes / dislikes / reports 는 삭제하지 않음
+    // Mongo.likes().deleteMany(Filters.eq("postId", p.id));    // ❌
+    // Mongo.dislikes().deleteMany(Filters.eq("postId", p.id)); // ❌
+    // Mongo.reports().deleteMany(Filters.eq("postId", p.id));  // ❌
+  }
+
   public Post getById(String id) {
     Document d = posts.find(Filters.eq("_id", new ObjectId(id))).first();
     return Post.fromDoc(d);
