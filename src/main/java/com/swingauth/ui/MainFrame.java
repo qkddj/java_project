@@ -330,33 +330,42 @@ public class MainFrame extends JFrame implements ThemeManager.ThemeChangeListene
    * 실종경보/재난문자 상세 내용을 보여주는 팝업.
    */
   private void showAlertDetailDialog(Alert a, Component parent) {
-    StringBuilder sb = new StringBuilder();
+  StringBuilder sb = new StringBuilder();
 
-    sb.append("종류: ").append(a.type).append("\n");
-    sb.append("지역: ").append(a.region).append("\n");
-    if (a.timeText != null) {
-      sb.append("발생일자: ").append(a.timeText).append("\n");
-    }
-    sb.append("\n");
+  sb.append("종류: ").append(a.type).append("\n");
 
-    // Amber Alert(실종경보)일 경우 상세 정보
-    if ("실종경보".equals(a.type)) {
-      if (a.name != null) sb.append("이름: ").append(a.name).append("\n");
-      if (a.ageNow != null) sb.append("현재 나이: ").append(a.ageNow).append("세\n");
-      if (a.sex != null) sb.append("성별(코드): ").append(a.sex).append("\n");
-      if (a.detailAddress != null) sb.append("발생 장소: ").append(a.detailAddress).append("\n");
-      if (a.feature != null) {
-        sb.append("\n옷차림/특징:\n").append(a.feature).append("\n");
-      }
-    }
-
-    sb.append("\n요약 메시지:\n").append(a.message != null ? a.message : "(없음)");
-
-    JOptionPane.showMessageDialog(parent,
-        sb.toString(),
-        "상세 정보",
-        JOptionPane.INFORMATION_MESSAGE);
+  if (a.stepName != null && !a.stepName.isBlank()) {
+    sb.append("긴급단계: ").append(a.stepName).append("\n");
   }
+  if (a.disasterType != null && !a.disasterType.isBlank()) {
+    sb.append("재해구분: ").append(a.disasterType).append("\n");
+  }
+
+  sb.append("지역: ").append(a.region).append("\n");
+
+  if (a.timeText != null && !a.timeText.isBlank()) {
+    sb.append("생성 시각: ").append(a.timeText).append("\n");
+  }
+  if (a.sn != null && !a.sn.isBlank()) {
+    sb.append("일련번호: ").append(a.sn).append("\n");
+  }
+  if (a.regYmd != null && !a.regYmd.isBlank()) {
+    sb.append("등록일자: ").append(a.regYmd).append("\n");
+  }
+  if (a.mdfcnYmd != null && !a.mdfcnYmd.isBlank()) {
+    sb.append("수정일자: ").append(a.mdfcnYmd).append("\n");
+  }
+
+  sb.append("\n메시지 내용:\n")
+    .append(a.message != null ? a.message : "(없음)");
+
+  JOptionPane.showMessageDialog(
+      parent,
+      sb.toString(),
+      "재난문자 상세 정보",
+      JOptionPane.INFORMATION_MESSAGE
+  );
+}
 
 
   /* ===================== 테마 변경 ===================== */

@@ -16,67 +16,53 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
- * 행안부 긴급재난문자 + 경찰청 실종경보 등을 가져오되,
- * API 호출 결과를 MongoDB alerts 컬렉션에 캐시해 두고
- * 일정 시간(1시간) 이내에는 DB 데이터만 사용하는 서비스.
+ * 행안부 긴급재난문자를 가져오고,
+ * MongoDB alerts 컬렉션에 캐시해 두는 서비스.
  *
- * ★ 실제 endpoint URL/파라미터/JSON 구조는
- *   각 오픈API 문서를 보고 맞춰야 한다. (여기는 골격 예시)
+ * - 캐시 TTL: 1시간
+ * - 전국 기준 최신 N개(예: 30개)만 가져와 정렬해서 반환
+ * - 필요하면 지역 기준 조회 메서드(getAlertsForRegion)도 사용 가능
  */
 public class SafetyAlertService {
 
     // === 캐시 TTL (ms) : 1시간 ===
     private static final long CACHE_MILLIS = 60 * 60 * 1000L;
 
-    // TODO: 행안부 재난문자 serviceKey 발급 후 교체
-    private static final String MOIS_SERVICE_KEY = "행안부_서비스키";
+    // ★ 행안부 재난문자 serviceKey (네가 발급받은 값으로 교체)
+    private static final String MOIS_SERVICE_KEY = "N8TKWZ468EC6747W";
 
-    // 경찰청 안전Dream 실종경보 authKey (발급받은 값)
-    private static final String POLICE_AMBER_KEY = "726ce91740b845ad";
-
-    // 안전Dream 문서 기준 esntlId (고유아이디) – 키 목록 화면의 "발급 ID"
-    private static final String POLICE_ESNTL_ID = "10000898";
-
-    // TODO: 실제 긴급재난문자 API URL (나중에 교체)
+    // 행안부 긴급재난문자 API URL
     private static final String MOIS_ALERT_URL =
-            "https://www.safetydata.go.kr/openapi/긴급재난문자_엔드포인트";
-
-    // 안전Dream 실종경보(amberList) URL – 문서 기준 POST
-    private static final String POLICE_AMBER_URL =
-            "https://www.safe182.go.kr/api/lcm/amberList.do";
-
-    // Amber Alert를 최근 며칠까지 가져올지 (임시 30일)
-    private static final int AMBER_DAYS_RANGE = 30;
+            "https://www.safetydata.go.kr/V2/api/DSSP-IF-00247";
 
     // 전국 기준 조회 시 사용하는 regionKey
     private static final String GLOBAL_REGION_KEY = "__ALL__";
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final MongoCollection<Document> alertsColl = Mongo.alerts();
 
     /** 공통 포맷 Alert DTO */
     public static class Alert {
-        public String type;      // "재난문자" / "실종경보" 등
+        public String type;      // "재난문자"
         public String region;    // "서울특별시 송파구 잠실동" 등
         public String message;   // 리스트에서 보일 한 줄 요약
-        public String timeText;  // 표시용 시간 문자열
+        public String timeText;  // 표시용 시간 문자열 (CRT_DT)
         public OffsetDateTime timestamp; // 정렬용 (null 가능)
 
-        // ===== Amber(실종경보) 상세용 필드 =====
-        public String name;          // 성명
-        public String ageNow;        // 현재 나이
-        public String sex;           // 성별 코드/설명
-        public String feature;       // 옷차림/신체특징(etcSpfeatr)
-        public String occrDate;      // 발생일자(YYYYMMDD)
-        public String detailAddress; // 발생장소
-        public String rawSource;     // 원본 JSON 문자열 (디버깅용, 선택)
+        // 선택: 재난문자 추가 필드들
+        public String stepName;      // 긴급단계명(EMRG_STEP_NM)
+        public String disasterType;  // 재해구분명(DST_SE_NM)
+        public String sn;            // 일련번호(SN)
+        public String regYmd;        // 등록일자(REG_YMD)
+        public String mdfcnYmd;      // 수정일자(MDFCN_YMD)
 
         @Override
         public String toString() {
@@ -90,19 +76,10 @@ public class SafetyAlertService {
        ========================================================= */
 
     /**
-     * (이전 버전과의 호환용)
-     * 지역 기준(영문 region/city)을 사용해 캐시+API로 알림 조회.
-     * 지금은 쓰지 않지만 남겨둔다.
-     */
-    public List<Alert> fetchAllAlertsForRegion(String regionEn, String cityEn, int maxCount)
-            throws IOException, InterruptedException {
-        return getAlertsForRegion(regionEn, cityEn, maxCount);
-    }
-
-    /**
      * ✅ 전국 기준, 가장 최신 알림 maxCount건을 가져온다.
      * - MongoDB에 regionKey="__ALL__" 로 캐시
      * - 캐시가 1시간 이내면 DB만 조회
+     * - 재난문자만 사용 (안전Dream, 실종경보 X)
      */
     public List<Alert> fetchLatestAlerts(int maxCount)
             throws IOException, InterruptedException {
@@ -154,8 +131,9 @@ public class SafetyAlertService {
     }
 
     /**
-     * [기존 버전] 내 지역 기준 안전알림 조회 (캐시 사용)
-     * 지금은 쓰지 않지만, 필요하면 재사용 가능.
+     * (옵션) 내 지역 기준 안전알림 조회 (캐시 사용)
+     * - regionEn / cityEn 은 영문 (예: "seoul", "chungcheongnam-do")
+     * - 내부에서 한글 키워드로 매핑해서 사용
      */
     public List<Alert> getAlertsForRegion(String regionEn, String cityEn, int maxCount)
             throws IOException, InterruptedException {
@@ -181,7 +159,7 @@ public class SafetyAlertService {
 
         // 2) 캐시가 오래됐으면 API 한 번만 호출해서 갱신
         if (needRefresh) {
-            List<Alert> fresh = fetchAllAlertsForRegionFromApi(regionEn, cityEn, maxCount);
+            List<Alert> fresh = fetchAllAlertsForRegionFromApi(regionKeyKo, maxCount);
 
             // 해당 지역 이전 캐시 삭제
             alertsColl.deleteMany(Filters.eq("regionKey", regionKeyKo));
@@ -220,24 +198,22 @@ public class SafetyAlertService {
         d.append("timeText", a.timeText);
         d.append("fetchedAt", fetchedAt);
 
-        // Amber 상세 필드 (없으면 null 저장)
-        d.append("name", a.name);
-        d.append("ageNow", a.ageNow);
-        d.append("sex", a.sex);
-        d.append("feature", a.feature);
-        d.append("occrDate", a.occrDate);
-        d.append("detailAddress", a.detailAddress);
-        d.append("rawSource", a.rawSource);
+        d.append("stepName", a.stepName);
+        d.append("disasterType", a.disasterType);
+        d.append("sn", a.sn);
+        d.append("regYmd", a.regYmd);
+        d.append("mdfcnYmd", a.mdfcnYmd);
 
         // createdAt: 실제 알림 시간(없으면 fetchedAt)
         Date createdAt;
         if (a.timestamp != null) {
             createdAt = Date.from(a.timestamp.toInstant());
-        } else if (a.occrDate != null && !a.occrDate.isBlank()) {
-            try {
-                LocalDate dDate = LocalDate.parse(a.occrDate, DateTimeFormatter.BASIC_ISO_DATE);
-                createdAt = Date.from(dDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant());
-            } catch (Exception e) {
+        } else if (a.timeText != null && !a.timeText.isBlank()) {
+            // CRT_DT 기반으로 한 번 더 시도
+            OffsetDateTime odt = parseMoisTimeOrNull(a.timeText);
+            if (odt != null) {
+                createdAt = Date.from(odt.toInstant());
+            } else {
                 createdAt = fetchedAt;
             }
         } else {
@@ -254,16 +230,13 @@ public class SafetyAlertService {
         a.message = d.getString("message");
         a.timeText = d.getString("timeText");
 
-        a.name = d.getString("name");
-        a.ageNow = d.getString("ageNow");
-        a.sex = d.getString("sex");
-        a.feature = d.getString("feature");
-        a.occrDate = d.getString("occrDate");
-        a.detailAddress = d.getString("detailAddress");
-        a.rawSource = d.getString("rawSource");
+        a.stepName = d.getString("stepName");
+        a.disasterType = d.getString("disasterType");
+        a.sn = d.getString("sn");
+        a.regYmd = d.getString("regYmd");
+        a.mdfcnYmd = d.getString("mdfcnYmd");
 
-        // timestamp는 굳이 다시 쓰지 않아도 되서 null 처리 (정렬은 createdAt 기반)
-        a.timestamp = null;
+        a.timestamp = null;  // 정렬은 createdAt 기준이라 다시 세팅 안 해도 됨
         return a;
     }
 
@@ -308,22 +281,15 @@ public class SafetyAlertService {
     /* ============ 실제 API를 날리는 부분 ============ */
 
     /**
-     * (기존) 지역 기준 API 호출. 지금은 안 쓰지만 남겨둔다.
+     * 지역 기준 API 호출 (재난문자만).
      */
-    private List<Alert> fetchAllAlertsForRegionFromApi(String regionEn, String cityEn, int maxCount)
+    private List<Alert> fetchAllAlertsForRegionFromApi(String regionKeywordKo, int maxCount)
             throws IOException, InterruptedException {
-
-        String regionKeywordKo = mapToKoreanRegionKeyword(regionEn, cityEn);
 
         List<Alert> all = new ArrayList<>();
 
-        // TODO: 나중에 행안부 재난문자 붙이면 여기에서 호출
-        // all.addAll(fetchMoisDisasterAlerts(regionKeywordKo, 20));
-
-        int remain = Math.max(0, maxCount - all.size());
-        if (remain > 0) {
-            all.addAll(fetchMissingAlertsLast30Days(regionKeywordKo, remain));
-        }
+        // 행안부 재난문자 (지역 키워드 기준)
+        all.addAll(fetchMoisDisasterAlerts(regionKeywordKo, maxCount));
 
         all.sort((a, b) -> {
             if (a.timestamp == null && b.timestamp == null) return 0;
@@ -341,16 +307,11 @@ public class SafetyAlertService {
     /**
      * ✅ 전국 기준 최신 알림을 API에서 직접 가져오는 버전.
      * - 지역 필터 없음 (전체 지역)
-     * - Amber 30일 범위 내에서 최대 maxCount건까지 수집
      */
     private List<Alert> fetchLatestAlertsFromApi(int maxCount)
             throws IOException, InterruptedException {
 
-        List<Alert> all = new ArrayList<>();
-
-        // TODO: 나중에 행안부 재난문자 붙이면 여기에서 all.addAll(...)
-
-        all.addAll(fetchMissingAlertsLast30Days("", maxCount));
+        List<Alert> all = fetchMoisDisasterAlerts("", maxCount);
 
         all.sort((a, b) -> {
             if (a.timestamp == null && b.timestamp == null) return 0;
@@ -366,127 +327,169 @@ public class SafetyAlertService {
     }
 
     /**
-     * 행안부 재난문자 – 아직 실제 스펙을 안 맞춰서 더미 구현.
-     * 나중에 MOIS_SERVICE_KEY / MOIS_ALERT_URL 세팅 후 구현하면 됨.
+     * ✅ 행안부 재난문자 API 호출 구현.
+     * regionKeywordKo 가 비어있지 않으면 rgnNm 파라미터와
+     * 메시지/지역 문자열에 대한 추가 필터 둘 다 적용.
      */
     private List<Alert> fetchMoisDisasterAlerts(String regionKeywordKo, int rows)
             throws IOException, InterruptedException {
 
-        // TODO: 실제 행안부 재난문자 API 스펙에 맞춰 구현
-        return Collections.emptyList();
-    }
-
-    /**
-     * 경찰청 안전Dream 실종경보(amberList) API를
-     * 최근 30일 범위에서 돌면서 최대 maxCount 개까지 가져온다.
-     * - regionKeywordKo가 비어있지 않으면 해당 키워드가 포함된 지역/특징만 남김
-     * - 이름+발생일자+주소 조합으로 중복 제거
-     */
-    private List<Alert> fetchMissingAlertsLast30Days(String regionKeywordKo, int maxCount)
-            throws IOException, InterruptedException {
-
         List<Alert> result = new ArrayList<>();
-        String lowerRegionKeyword = regionKeywordKo.toLowerCase();
 
-        // 이미 추가된 알림을 기억하기 위한 Set
-        Set<String> seenKeys = new HashSet<>();
+        StringBuilder url = new StringBuilder(MOIS_ALERT_URL)
+                .append("?serviceKey=")
+                .append(URLEncoder.encode(MOIS_SERVICE_KEY, StandardCharsets.UTF_8))
+                .append("&pageNo=1")
+                .append("&numOfRows=").append(rows)
+                .append("&returnType=json");
 
-        LocalDate today = LocalDate.now();
+        // 지역명이 있으면 rgnNm 파라미터로 같이 넘겨줌 (예: "서울", "충남" 등)
+        if (regionKeywordKo != null && !regionKeywordKo.isBlank()) {
+            url.append("&rgnNm=")
+               .append(URLEncoder.encode(regionKeywordKo, StandardCharsets.UTF_8));
+        }
 
-        for (int offset = 0; offset < AMBER_DAYS_RANGE && result.size() < maxCount; offset++) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url.toString()))
+                .GET()
+                .build();
 
-            String date = today.minusDays(offset)
-                    .format(DateTimeFormatter.BASIC_ISO_DATE); // YYYYMMDD
+        HttpResponse<String> response =
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            String form = "esntlId=" + URLEncoder.encode(POLICE_ESNTL_ID, StandardCharsets.UTF_8)
-                    + "&authKey=" + URLEncoder.encode(POLICE_AMBER_KEY, StandardCharsets.UTF_8)
-                    + "&rowSize=" + maxCount
-                    + "&page=1"
-                    + "&occrde=" + date;
+        if (response.statusCode() != 200) {
+            throw new IOException("MOIS API HTTP 오류: " + response.statusCode() +
+                    " body=" + response.body());
+        }
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(POLICE_AMBER_URL))
-                    .POST(HttpRequest.BodyPublishers.ofString(form))
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .build();
+        String body = response.body();
 
-            HttpResponse<String> response =
-                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
+        JSONArray items = extractMoisItemsArray(body);
+        if (items == null) {
+            System.err.println("[MOIS] JSON 파싱 오류: items 배열을 찾을 수 없음");
+            return result;
+        }
+
+        String lowerRegionKeyword = regionKeywordKo == null ? "" : regionKeywordKo.toLowerCase();
+
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.getJSONObject(i);
+
+            String msg       = item.optString("MSG_CN", "").trim();        // 메시지내용
+            String areaName  = item.optString("RCPTN_RGN_NM", "").trim();  // 수신지역명
+            String crtDt     = item.optString("CRT_DT", "").trim();        // 생성일시
+            String stepNm    = item.optString("EMRG_STEP_NM", "").trim();  // 긴급단계명
+            String dstSeNm   = item.optString("DST_SE_NM", "").trim();     // 재해구분명
+            String sn        = item.optString("SN", "").trim();            // 일련번호
+            String regYmd    = item.optString("REG_YMD", "").trim();       // 등록일자
+            String mdfcnYmd  = item.optString("MDFCN_YMD", "").trim();     // 수정일자
+
+            if (msg.isEmpty() && areaName.isEmpty()) {
                 continue;
             }
 
-            String body = response.body();
-            JSONObject root = new JSONObject(body);
-
-            String resultCode = root.optString("result", "");
-            if (!"00".equals(resultCode)) {
+            String joined = (areaName + " " + msg).toLowerCase();
+            if (!lowerRegionKeyword.isBlank()
+                    && !joined.contains(lowerRegionKeyword)) {
                 continue;
             }
 
-            JSONArray list = root.optJSONArray("list");
-            if (list == null) continue;
+            Alert a = new Alert();
+            a.type = "재난문자";
+            a.region = areaName.isBlank() ? "전국" : areaName;
 
-            for (int i = 0; i < list.length() && result.size() < maxCount; i++) {
-                JSONObject item = list.getJSONObject(i);
+            // 리스트에서 보이는 한 줄 요약
+            String prefix = stepNm.isEmpty() ? "" : ("[" + stepNm + "] ");
+            a.message = prefix + msg;
 
-                String addr = item.optString("occrAdres", "");     // 발생장소
-                String name = item.optString("nm", "");            // 성명
-                String ageNow = item.optString("ageNow", "");      // 현재 나이
-                String sex = item.optString("sexdstnDscd", "");    // 성별 코드
-                String feature = item.optString("etcSpfeatr", ""); // 옷차림/특징
-                String occrde = item.optString("occrde", date);    // 발생일자
+            a.timeText = crtDt;
+            a.timestamp = parseMoisTimeOrNull(crtDt);
 
-                // ===== 중복 체크용 키 =====
-                String key = name + "|" + occrde + "|" + addr;
-                if (!seenKeys.add(key)) {
-                    // 이미 같은 (이름, 날짜, 장소) 조합이 있다면 스킱
-                    continue;
-                }
+            a.stepName = stepNm;
+            a.disasterType = dstSeNm;
+            a.sn = sn;
+            a.regYmd = regYmd;
+            a.mdfcnYmd = mdfcnYmd;
 
-                String joined = (addr + " " + feature).toLowerCase();
-                if (!lowerRegionKeyword.isBlank()
-                        && !joined.contains(lowerRegionKeyword)) {
-                    continue;
-                }
-
-                Alert a = new Alert();
-                a.type = "실종경보";
-                a.region = addr.isBlank() ? "전국" : addr;
-                a.name = name;
-                a.ageNow = ageNow;
-                a.sex = sex;
-                a.feature = feature;
-                a.occrDate = occrde;
-                a.detailAddress = addr;
-                a.timeText = occrde;
-
-                // 리스트에서 보이는 한 줄 요약
-                a.message = String.format("%s(%s세) 실종 – %s", name, ageNow, feature);
-
-                // timestamp (발생일 00시 기준)
-                try {
-                    LocalDate dDate = LocalDate.parse(occrde, DateTimeFormatter.BASIC_ISO_DATE);
-                    a.timestamp = dDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toOffsetDateTime();
-                } catch (Exception e) {
-                    a.timestamp = null;
-                }
-
-                a.rawSource = item.toString();
-
-                result.add(a);
-            }
+            result.add(a);
         }
 
         return result;
     }
 
-    private OffsetDateTime parseIsoTimeOrNull(String s) {
+    /* ==================== 시간/JSON 파싱 유틸 ==================== */
+
+    /**
+     * 행안부 CRT_DT 포맷은 문서에 명시가 없어서
+     * 몇 가지 가능한 포맷을 순서대로 시도.
+     */
+    private OffsetDateTime parseMoisTimeOrNull(String s) {
         if (s == null || s.isBlank()) return null;
-        try {
-            return OffsetDateTime.parse(s, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        } catch (Exception e) {
-            return null;
+
+        String[] patterns = {
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyyMMddHHmmss",
+                "yyyyMMddHHmm",
+                "yyyyMMdd"
+        };
+
+        for (String p : patterns) {
+            try {
+                DateTimeFormatter f = DateTimeFormatter.ofPattern(p);
+                if (p.length() >= 12) { // 날짜+시간
+                    LocalDateTime ldt = LocalDateTime.parse(s, f);
+                    return ldt.atZone(KST).toOffsetDateTime();
+                } else { // 날짜만
+                    LocalDate ld = LocalDate.parse(s, f);
+                    return ld.atStartOfDay(KST).toOffsetDateTime();
+                }
+            } catch (DateTimeParseException ignored) {
+            }
         }
+        return null;
+    }
+
+    /**
+     * 행안부 JSON 응답에서 실제 데이터 배열을 찾아서 반환.
+     * - body가 JSONArray 인 케이스까지 모두 처리
+     */
+    private JSONArray extractMoisItemsArray(String body) {
+        try {
+            String trimmed = body.trim();
+
+            // 응답이 바로 배열인 경우
+            if (trimmed.startsWith("[")) {
+                return new JSONArray(trimmed);
+            }
+
+            JSONObject root = new JSONObject(trimmed);
+
+            // 1) body가 곧 배열인 경우
+            if (root.has("body")) {
+                Object b = root.get("body");
+                if (b instanceof JSONArray) {
+                    return (JSONArray) b;
+                }
+                if (b instanceof JSONObject) {
+                    JSONObject bj = (JSONObject) b;
+                    if (bj.has("items")) return bj.getJSONArray("items");
+                    if (bj.has("data"))  return bj.getJSONArray("data");
+                }
+            }
+
+            // 2) data / items가 상위에 있는 경우
+            if (root.has("data")) {
+                Object d = root.get("data");
+                if (d instanceof JSONArray) return (JSONArray) d;
+            }
+            if (root.has("items")) {
+                Object d = root.get("items");
+                if (d instanceof JSONArray) return (JSONArray) d;
+            }
+
+        } catch (Exception e) {
+            System.err.println("[MOIS] JSON 파싱 오류: " + e.getMessage());
+        }
+        return null;
     }
 }
