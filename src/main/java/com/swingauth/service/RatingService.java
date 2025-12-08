@@ -137,9 +137,10 @@ public class RatingService {
         try {
             Document incDoc = new Document();
             
-            // 서비스별 평점 합계 업데이트
+            // 서비스별 평점 합계/횟수 업데이트 (건너뛰기일 경우 호출되지 않음)
             if ("randomChat".equals(serviceType)) {
                 incDoc.append("chatTotalRating", rating);
+                incDoc.append("randomChatCount", 1); // 평점 제출 시에만 횟수 증가
             } else if ("randomVideo".equals(serviceType)) {
                 incDoc.append("videoTotalRating", rating);
             }

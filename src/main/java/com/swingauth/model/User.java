@@ -29,7 +29,7 @@ public class User {
   public Integer videoTotalRating = 0; // 영상통화에서 받은 평점 합
 
   // 랜덤 채팅 통계
-  public Integer randomChatCount = 0;  // 랜덤채팅 진행 횟수
+  public Integer randomChatCount = 0;  // 랜덤채팅 평점 제출 횟수
   public Integer chatTotalRating = 0;  // 랜덤채팅에서 받은 평점 합
 
   public Document toDoc() {

@@ -3,10 +3,7 @@ package com.swingauth.chat.server;
 import com.corundumstudio.socketio.*;
 import com.corundumstudio.socketio.listener.ConnectListener;
 import com.corundumstudio.socketio.listener.DisconnectListener;
-import com.mongodb.client.model.Filters;
-import com.swingauth.db.Mongo;
 import com.swingauth.service.RatingService;
-import org.bson.Document;
 import org.json.JSONObject;
 
 import java.net.InetAddress;
@@ -195,12 +192,6 @@ public class ChatServer {
             matchedPairs.put(user1Id, user2Id);
             matchedPairs.put(user2Id, user1Id);
 
-            // 채팅 횟수 증가
-            if (!user1Username.equals("unknown") && !user2Username.equals("unknown")) {
-                incrementChatCount(user1Username);
-                incrementChatCount(user2Username);
-            }
-
             // matched 이벤트에 partnerId (Socket ID)와 partnerUsername 전달
             JSONObject user1Data = new JSONObject();
             user1Data.put("partnerId", user2Id);
@@ -250,27 +241,6 @@ public class ChatServer {
 
     public int getPort() {
         return port;
-    }
-    
-    /**
-     * 사용자의 랜덤채팅 횟수 증가
-     */
-    private void incrementChatCount(String username) {
-        if (username == null || username.isBlank() || username.equals("unknown")) {
-            return;
-        }
-        
-        try {
-            // randomChatCount 증가
-            Mongo.users().updateOne(
-                Filters.eq("username", username),
-                new Document("$inc", new Document("randomChatCount", 1))
-            );
-            System.out.println("랜덤채팅 횟수 증가: username=" + username);
-        } catch (Exception e) {
-            System.err.println("랜덤채팅 횟수 증가 실패: username=" + username + ", 오류=" + e.getMessage());
-            e.printStackTrace();
-        }
     }
     
     /**
