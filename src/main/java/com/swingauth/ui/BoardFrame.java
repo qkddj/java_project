@@ -713,12 +713,45 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       taReason.setLineWrap(true);
       taReason.setWrapStyleWord(true);
 
+      String[] reportTypes = {
+          "게시판 성격에 부적절함",
+          "음란물/불건전한 만남 및 대화",
+          "불법촬영물 등의 유통",
+          "정당/정치인 비하 및 선거운동",
+          "욕설/비하",
+          "상업적 광고 및 판매",
+          "유출/사칭/사기",
+          "낚시/놀람/도배"
+      };
+      JComboBox<String> reportTypeCombo = new JComboBox<>(reportTypes);
+      reportTypeCombo.setPreferredSize(new Dimension(200, 28));
+
       JPanel panel = new JPanel(new BorderLayout(8, 8));
       panel.setBorder(new EmptyBorder(8, 8, 8, 8));
+
+      JPanel contentPanel = new JPanel();
+      contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+      contentPanel.setBorder(new EmptyBorder(0, 0, 0, 0));
+
+      JPanel typePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+      JLabel typeLabel = new JLabel("신고 유형:");
+      typePanel.add(typeLabel);
+      typePanel.add(Box.createHorizontalStrut(8));
+      typePanel.add(reportTypeCombo);
+      typePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+      contentPanel.add(typePanel);
+      contentPanel.add(Box.createVerticalStrut(8));
+
       JLabel reasonLabel = new JLabel("신고 사유를 입력하세요:");
-      panel.add(reasonLabel, BorderLayout.NORTH);
+      reasonLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+      contentPanel.add(reasonLabel);
+
       JScrollPane reasonScroll = new JScrollPane(taReason);
-      panel.add(reasonScroll, BorderLayout.CENTER);
+      reasonScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+      contentPanel.add(Box.createVerticalStrut(4));
+      contentPanel.add(reasonScroll);
+
+      panel.add(contentPanel, BorderLayout.CENTER);
 
       JButton okButton = new JButton("확인");
       JButton cancelButton = new JButton("취소");
@@ -747,7 +780,14 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
       ThemeManager.updateButtonColors(cancelButton, reportBtnBg, reportBtnFg);
       
       okButton.addActionListener(ev -> {
+        String selectedType = (String) reportTypeCombo.getSelectedItem();
         String reason = taReason.getText();
+        if (selectedType == null || selectedType.trim().isEmpty()) {
+          JOptionPane.showMessageDialog(reportDialog,
+              "신고 유형을 선택하세요.",
+              "알림", JOptionPane.INFORMATION_MESSAGE);
+          return;
+        }
         if (reason == null || reason.trim().isEmpty()) {
           JOptionPane.showMessageDialog(reportDialog,
               "신고 사유를 입력하세요.",
@@ -760,7 +800,7 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         new SwingWorker<Void, Void>() {
           @Override
           protected Void doInBackground() {
-            reportService.reportPost(user, p, reason.trim());
+            reportService.reportPost(user, p, selectedType, reason.trim());
             return null;
           }
 
@@ -815,6 +855,13 @@ public class BoardFrame extends JFrame implements ThemeManager.ThemeChangeListen
         Color reportThemeBtnFg = isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK;
         Color reportThemeBtnBorder = isDarkMode ? ThemeManager.DARK_BORDER : ThemeManager.LIGHT_BORDER;
         
+        contentPanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        typePanel.setBackground(isDarkMode ? ThemeManager.DARK_BG : ThemeManager.LIGHT_BG);
+        typeLabel.setForeground(isDarkMode ? ThemeManager.TEXT_LIGHT : ThemeManager.TEXT_DARK);
+        reportTypeCombo.setBackground(reportThemeBtnBg);
+        reportTypeCombo.setForeground(reportThemeBtnFg);
+        reportTypeCombo.setBorder(BorderFactory.createLineBorder(reportThemeBtnBorder, 1));
+
         okButton.setBackground(reportThemeBtnBg);
         okButton.setForeground(reportThemeBtnFg);
         okButton.setBorder(BorderFactory.createLineBorder(reportThemeBtnBorder, 1));

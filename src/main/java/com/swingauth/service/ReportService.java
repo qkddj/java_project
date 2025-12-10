@@ -32,13 +32,17 @@ public class ReportService {
    * - 신고 당한 사용자(users.reportsReceived) +1
    * - 같은 유저가 같은 글을 여러 번 신고하면 IllegalStateException 발생
    */
-  public void reportPost(User reporter, Post post, String reason) {
+  public void reportPost(User reporter, Post post, String type, String reason) {
     if (post == null || post.id == null) {
       throw new IllegalArgumentException("유효하지 않은 게시글입니다.");
+    }
+    if (type == null || type.trim().isEmpty()) {
+      throw new IllegalArgumentException("신고 유형을 선택하세요.");
     }
     if (reason == null || reason.trim().isEmpty()) {
       throw new IllegalArgumentException("신고 사유를 입력하세요.");
     }
+    String selectedType = type.trim();
     String trimmed = reason.trim();
 
     String reportedUsername = post.authorUsername;
@@ -48,6 +52,7 @@ public class ReportService {
         .append("board", post.board)
         .append("reportedUsername", reportedUsername)
         .append("reporterUsername", reporter.username)
+        .append("type", selectedType)
         .append("reason", trimmed)
         .append("createdAt", new Date());
 
